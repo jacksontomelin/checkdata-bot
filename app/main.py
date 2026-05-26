@@ -832,9 +832,9 @@ def formatar_laudo(data: dict) -> str:
 
 def _extrair_fotos(data, _fotos=None) -> list:
     """
-    Percorre o JSON recursivamente procurando campos base64 de imagens.
-    Remove os campos de foto do dict para não poluir o texto.
-    Retorna lista de strings base64.
+    Extrai imagens base64 do JSON do laudo veicular.
+    Suporta campo 'imagens' com subchaves (dianteira, traseira, etc)
+    e qualquer outro campo de foto em base64.
     """
     import re as _re
     if _fotos is None:
@@ -846,6 +846,8 @@ def _extrair_fotos(data, _fotos=None) -> list:
         "foto1", "foto2", "foto3", "foto4", "foto5",
         "url_foto", "thumbnail", "picture", "pictures",
         "img", "imgs", "arquivo", "arquivos", "anexo", "anexos",
+        "dianteira", "traseira", "panoramica", "chassi", "motor",
+        "documento", "hodometro", "lateral", "detalhe",
     }
 
     B64_PATTERN = _re.compile(r'^[A-Za-z0-9+/]{100,}={0,2}$')
@@ -853,12 +855,10 @@ def _extrair_fotos(data, _fotos=None) -> list:
     def _is_base64(v):
         if not isinstance(v, str) or len(v) < 100:
             return False
-        # Remove data:image prefix if present
         s = v.split(',')[-1] if ',' in v else v
-        return bool(B64_PATTERN.match(s.replace('\n','').replace('\r','')))
+        return bool(B64_PATTERN.match(s.replace('\\n','').replace('\\r','')))
 
     def _clean_b64(v):
-        """Remove data:image/jpeg;base64, prefix if present."""
         if ',' in v:
             return v.split(',', 1)[1]
         return v
@@ -867,7 +867,13 @@ def _extrair_fotos(data, _fotos=None) -> list:
         keys_to_remove = []
         for k, v in list(data.items()):
             kl = k.lower()
-            if kl in FOTO_CAMPOS or 'foto' in kl or 'imag' in kl or 'photo' in kl or 'picture' in kl:
+            # Campo "imagens" com sub-dicionario (laudo veicular)
+            if kl == 'imagens' and isinstance(v, dict):
+                for sub_k, sub_v in list(v.items()):
+                    if _is_base64(sub_v):
+                        _fotos.append(_clean_b64(sub_v))
+                keys_to_remove.append(k)
+            elif kl in FOTO_CAMPOS or 'foto' in kl or 'imag' in kl or 'photo' in kl:
                 if _is_base64(v):
                     _fotos.append(_clean_b64(v))
                     keys_to_remove.append(k)
