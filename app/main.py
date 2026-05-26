@@ -1059,15 +1059,40 @@ async def cmd_consulta_direta(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         resultado = await consultar_qualquer(tipo, query)
         registrar_consulta(tipo, query, usuario, True)
+
+        fotos_b64 = _extrair_fotos(resultado)
+
+        if tipo in ("laudo_veicular", "laudo"):
+            corpo = formatar_laudo(resultado)
+        else:
+            corpo = formatar_resultado(resultado)
+
         texto = (
             "🦅 <b>Unicontroller</b>\n\n"
-            f"✅ <b>{LABELS[tipo]}</b>\n"
+            f"✅ <b>{LABELS.get(tipo, tipo)}</b>\n"
             f"🔎 <code>{query}</code>\n\n"
-            f"{formatar_resultado(resultado)}" + rodape()
+            f"{corpo}" + rodape()
         )
         if len(texto) > 4000:
             texto = texto[:3900] + "\n\n<i>... resultado truncado</i>" + rodape()
         await msg.edit_text(texto, parse_mode="HTML")
+
+        if fotos_b64:
+            for i, item in enumerate(fotos_b64[:10], 1):
+                label, b64 = item if isinstance(item, tuple) else ("📸 Foto", item)
+                try:
+                    import base64 as _b64mod, io
+                    img_bytes = _b64mod.b64decode(b64)
+                    bio = io.BytesIO(img_bytes)
+                    bio.name = f"foto_{i}.jpg"
+                    await update.message.reply_photo(
+                        photo=bio,
+                        caption=f"{label} ({i}/{len(fotos_b64)}) — {LABELS.get(tipo,tipo)}: {query}" + rodape(),
+                        parse_mode="HTML"
+                    )
+                except Exception as ef:
+                    logger.error(f"Erro ao enviar foto {i}: {ef}")
+
     except Exception as e:
         registrar_consulta(tipo, query, usuario, False, str(e))
         await msg.edit_text(f"❌ Erro: {str(e)}" + rodape(), parse_mode="HTML")
