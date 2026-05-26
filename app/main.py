@@ -190,6 +190,7 @@ async def lifespan(app: FastAPI):
             entry_points=[CallbackQueryHandler(cb_tipo_selecionado, pattern="^tipo:")],
             states={AGUARDANDO_VALOR: [MessageHandler(filters.TEXT & ~filters.COMMAND, cb_receber_valor)]},
             fallbacks=[CommandHandler("cancelar", cmd_cancelar)],
+            per_message=False,
         ))
         await bot_app.initialize()
         if WEBHOOK_URL:
@@ -728,7 +729,7 @@ function buildDocs(){
     {lang:'JavaScript (fetch)',code:`const res = await fetch('${BASE}/v1/consulta/cep?query=01310-100', {\\n  headers: { 'X-API-Key': 'uc_sua_chave' }\\n});\\nconst data = await res.json();`},
     {lang:'Python',code:`import requests\\nresp = requests.get(\\n  '${BASE}/v1/consulta/cnpj',\\n  params={'query': '00.000.000/0001-00'},\\n  headers={'X-API-Key': 'uc_sua_chave'}\\n)\\nprint(resp.json())`},
     {lang:'Node.js',code:`const axios = require('axios');\\nconst { data } = await axios.get('${BASE}/v1/consulta/placa', {\\n  params: { query: 'ABC1234' },\\n  headers: { 'X-API-Key': 'uc_sua_chave' }\\n});`},
-    {lang:'GitHub Actions',code:`- name: Consulta CPF\\n  run: |\\n    curl -H "X-API-Key: \${{ secrets.UNICONTROLLER_KEY }}" \\\\\\n    "${BASE}/v1/consulta/cpf?query=\${{ inputs.cpf }}"`},
+    {lang:'GitHub Actions',code:`- name: Consulta CPF\\n  run: |\\n    curl -H "X-API-Key: ${{ secrets.UNICONTROLLER_KEY }}" \\\\\\n    "${BASE}/v1/consulta/cpf?query=${{ inputs.cpf }}"`},
   ];
   document.getElementById('exemplosDoc').innerHTML = exemplos.map(e=>`
     <div style="margin-bottom:14px">
