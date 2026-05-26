@@ -165,13 +165,22 @@ async def listar_endpoints():
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_html(
         "🔍 <b>CheckData Bot</b>\n\n"
-        "Consulte CPF, CNPJ, CEP, placas e muito mais!\n\n"
-        "Use /menu para escolher o tipo de consulta\n"
-        "Ou use comandos diretos:\n"
-        "<code>/cpf 000.000.000-00</code>\n"
-        "<code>/cep 01310-100</code>\n"
-        "<code>/cnpj 00.000.000/0001-00</code>\n\n"
-        "Use /help para ver todos os comandos."
+        "Consulte dados completos direto pelo Telegram!\n\n"
+        "📋 <b>Comandos disponíveis:</b>\n\n"
+        "👤 <code>/cpf 000.000.000-00</code>\n"
+        "🏢 <code>/cnpj 00.000.000/0001-00</code>\n"
+        "📍 <code>/cep 00000-000</code>\n"
+        "🏥 <code>/cns 000000000000000</code>\n"
+        "🔤 <code>/nome João Silva</code>\n"
+        "✉️ <code>/email joao@email.com</code>\n"
+        "📞 <code>/telefone 11999999999</code>\n"
+        "🏘️ <code>/vizinhos 00000-000</code>\n"
+        "🚗 <code>/placa ABC1234</code>\n"
+        "🔑 <code>/proprietario 000.000.000-00</code>\n"
+        "👩 <code>/mae Nome da Mãe</code>\n"
+        "👨 <code>/pai Nome do Pai</code>\n"
+        "🗳️ <code>/titulo 000000000000</code>\n\n"
+        "Ou use /menu para botões interativos."
     )
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
