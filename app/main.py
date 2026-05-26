@@ -685,7 +685,7 @@ input:focus,select:focus{border-color:var(--accent)}
       <p style="font-family:'JetBrains Mono',monospace;color:var(--accent);margin-bottom:8px">1. AUTENTICAÇÃO — Header obrigatório:</p>
       <div class="key-box" style="margin-bottom:14px">X-API-Key: uc_sua_chave_aqui</div>
       <p style="font-family:'JetBrains Mono',monospace;color:var(--accent);margin-bottom:8px">2. ENDPOINT BASE:</p>
-      <div class="key-box" style="margin-bottom:14px" id="baseUrl">https://web-production-bb4d9.up.railway.app</div>
+      <div class="key-box" style="margin-bottom:14px" id="baseUrl">https://api-consultas-unicontroller-production.up.railway.app</div>
       <p style="font-family:'JetBrains Mono',monospace;color:var(--accent);margin-bottom:8px">3. ROTAS DISPONÍVEIS:</p>
     </div>
     <table style="margin-bottom:18px">
@@ -827,4 +827,4 @@ setInterval(loadStats, 10000);
 </html>"""
 
 if __name__ == "__main__":
-    uvicorn.run("main:api", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=False)
+    uvicorn.run("main:api", host="0.0.0.0", port=int(os.getenv("PORT", 8080)), reload=False)
