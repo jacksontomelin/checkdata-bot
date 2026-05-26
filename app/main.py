@@ -23,9 +23,6 @@ WEBHOOK_URL     = os.getenv("WEBHOOK_URL", "")
 
 CHECKDATA_BASE  = "https://checkdata.vip/api/consultas"
 
-AUTOR = "👨‍💻 Feito por <b>Jackson Tomelin</b>"
-SISTEMA = "🦅 <b>Unicontroller</b>"
-
 ENDPOINTS = {
     "cpf":          "cpf_basico",
     "cns":          "cns",
@@ -59,6 +56,13 @@ LABELS = {
 }
 
 AGUARDANDO_VALOR = 1
+
+def rodape() -> str:
+    return (
+        "\n\n─────────────────\n"
+        "🦅 <b>Unicontroller</b>\n"
+        "👨‍💻 <b>Developer:</b> Jackson Tomelin"
+    )
 
 # ─── CheckData helper ─────────────────────────────────────
 async def consultar_checkdata(tipo: str, query: str) -> dict:
@@ -94,9 +98,6 @@ def formatar_resultado(data, profundidade=0) -> str:
         return "\n".join(partes)
     else:
         return str(data)
-
-def rodape() -> str:
-    return f"\n\n─────────────────\n{SISTEMA}\n{AUTOR}"
 
 # ─── FastAPI app ──────────────────────────────────────────
 bot_app: Application = None
@@ -136,7 +137,7 @@ def verificar_chave(x_api_key: str = Header(...)):
 
 @api.get("/")
 async def root():
-    return {"sistema": "Unicontroller", "autor": "Jackson Tomelin", "endpoints": list(ENDPOINTS.keys())}
+    return {"sistema": "Unicontroller", "developer": "Jackson Tomelin", "endpoints": list(ENDPOINTS.keys())}
 
 @api.get("/consulta/{tipo}")
 async def consulta(tipo: str, query: str, _=Depends(verificar_chave)):
@@ -159,7 +160,7 @@ async def listar_endpoints():
 # ─── Handlers do Telegram ─────────────────────────────────
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_html(
-        f"{SISTEMA}\n"
+        "🦅 <b>Unicontroller</b>\n"
         "Sistema de Consultas\n\n"
         "📋 <b>Comandos disponíveis:</b>\n\n"
         "👤 <code>/cpf 000.000.000-00</code>\n"
@@ -176,16 +177,16 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "👨 <code>/pai Nome do Pai</code>\n"
         "🗳️ <code>/titulo 000000000000</code>\n\n"
         "Ou use /menu para botões interativos."
-        f"{rodape()}"
+        + rodape()
     )
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cmds = "\n".join([f"<code>/{k} &lt;valor&gt;</code> — {v}" for k, v in LABELS.items()])
     await update.message.reply_html(
-        f"{SISTEMA} — Ajuda\n\n"
+        "🦅 <b>Unicontroller</b> — Ajuda\n\n"
         f"📋 <b>Todos os comandos:</b>\n\n{cmds}\n\n"
         "Ou use /menu para botões interativos."
-        f"{rodape()}"
+        + rodape()
     )
 
 async def cmd_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -197,7 +198,9 @@ async def cmd_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             row.append(InlineKeyboardButton(tipos[i+1][1], callback_data=f"tipo:{tipos[i+1][0]}"))
         keyboard.append(row)
     await update.message.reply_html(
-        f"{SISTEMA}\n\n🔍 Escolha o tipo de consulta:{rodape()}",
+        "🦅 <b>Unicontroller</b>\n\n"
+        "🔍 Escolha o tipo de consulta:"
+        + rodape(),
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -206,7 +209,7 @@ async def cmd_consulta_direta(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_html(
             f"ℹ️ Use: <code>/{tipo} &lt;valor&gt;</code>\n"
             f"Exemplo: <code>/{tipo} {_exemplos(tipo)}</code>"
-            f"{rodape()}"
+            + rodape()
         )
         return
     query = " ".join(context.args)
@@ -214,17 +217,17 @@ async def cmd_consulta_direta(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         resultado = await consultar_checkdata(tipo, query)
         texto = (
-            f"{SISTEMA}\n\n"
+            "🦅 <b>Unicontroller</b>\n\n"
             f"✅ <b>{LABELS[tipo]}</b>\n"
             f"🔎 <code>{query}</code>\n\n"
             f"{formatar_resultado(resultado)}"
-            f"{rodape()}"
+            + rodape()
         )
         if len(texto) > 4000:
             texto = texto[:3900] + "\n\n<i>... resultado truncado</i>" + rodape()
         await msg.edit_text(texto, parse_mode="HTML")
     except Exception as e:
-        await msg.edit_text(f"❌ Erro: {str(e)}{rodape()}", parse_mode="HTML")
+        await msg.edit_text(f"❌ Erro: {str(e)}" + rodape(), parse_mode="HTML")
 
 async def cb_tipo_selecionado(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -235,7 +238,7 @@ async def cb_tipo_selecionado(update: Update, context: ContextTypes.DEFAULT_TYPE
         f"✏️ Você escolheu <b>{LABELS[tipo]}</b>\n\n"
         f"Digite o valor para consultar:\n"
         f"<i>Exemplo: {_exemplos(tipo)}</i>"
-        f"{rodape()}"
+        + rodape()
     )
     return AGUARDANDO_VALOR
 
@@ -248,21 +251,21 @@ async def cb_receber_valor(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         resultado = await consultar_checkdata(tipo, query_val)
         texto = (
-            f"{SISTEMA}\n\n"
+            "🦅 <b>Unicontroller</b>\n\n"
             f"✅ <b>{LABELS[tipo]}</b>\n"
             f"🔎 <code>{query_val}</code>\n\n"
             f"{formatar_resultado(resultado)}"
-            f"{rodape()}"
+            + rodape()
         )
         if len(texto) > 4000:
             texto = texto[:3900] + "\n\n<i>... resultado truncado</i>" + rodape()
         await msg.edit_text(texto, parse_mode="HTML")
     except Exception as e:
-        await msg.edit_text(f"❌ Erro: {str(e)}{rodape()}", parse_mode="HTML")
+        await msg.edit_text(f"❌ Erro: {str(e)}" + rodape(), parse_mode="HTML")
     return ConversationHandler.END
 
 async def cmd_cancelar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_html(f"❌ Consulta cancelada.{rodape()}")
+    await update.message.reply_html("❌ Consulta cancelada." + rodape())
     return ConversationHandler.END
 
 def _exemplos(tipo: str) -> str:
