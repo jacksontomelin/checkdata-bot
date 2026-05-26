@@ -210,8 +210,16 @@ async def lifespan(app: FastAPI):
         ))
         await bot_app.initialize()
         if WEBHOOK_URL:
-            await bot_app.bot.set_webhook(f"{WEBHOOK_URL}/webhook")
+            # Limpa webhook antigo antes de registrar novo
+            await bot_app.bot.delete_webhook(drop_pending_updates=True)
+            await bot_app.bot.set_webhook(
+                url=f"{WEBHOOK_URL}/webhook",
+                drop_pending_updates=True,
+                allowed_updates=Update.ALL_TYPES,
+            )
+            logger.info(f"✅ Webhook registrado: {WEBHOOK_URL}/webhook")
         else:
+            logger.info("🔄 Iniciando polling mode")
             asyncio.create_task(bot_app.run_polling())
     yield
     if bot_app: await bot_app.shutdown()
@@ -1327,14 +1335,13 @@ async function loadClientes(){
 }
 async function toggleKey(key, ativo){
   const ak=getAdmin(); if(!ak) return;
-  const rota = ativo ? `/admin/keys/${key}/revogar` : `/admin/keys/${key}/reativar`;
-  // try revoke first if active
-  const url = ativo ? `/admin/keys/${key}` : `/admin/keys/${key}/reativar`;
+  const url    = ativo ? `/admin/keys/${key}` : `/admin/keys/${key}/reativar`;
   const method = ativo ? 'DELETE' : 'PATCH';
   try{
     const d = await fetch(url,{method,headers:{'X-API-Key':ak}}).then(r=>r.json());
     if(d.detail){clearAdmin();alert('Erro: '+d.detail);return;}
     loadClientes();
+    loadKeys();
   }catch(e){clearAdmin();alert('Erro: '+e)}
 }
 async function exportarKey(key){
