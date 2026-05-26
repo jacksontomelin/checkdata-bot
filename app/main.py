@@ -318,6 +318,96 @@ async def info_key(key: str):
     return {"key": key, **api_keys[key]}
 
 # ─── Stats ────────────────────────────────────────────────
+# ─── Exportação JSON para implantação externa ─────────────
+@api.get("/admin/export/key/{key}", dependencies=[Depends(admin_auth)])
+async def exportar_key(key: str, request: Request):
+    """Exporta configuração completa de uma key para implantação."""
+    if key not in api_keys:
+        raise HTTPException(status_code=404, detail="Key não encontrada.")
+    v = api_keys[key]
+    base = str(request.base_url).rstrip("/")
+    return {
+        "unicontroller": {
+            "api_key":    key,
+            "cliente":    v.get("cliente", v["nome"]),
+            "plano":      v.get("plano", "custom"),
+            "limite":     v["limite"],
+            "usado":      v["usado"],
+            "restante":   (v["limite"] - v["usado"]) if v["limite"] != -1 else -1,
+            "ativo":      v["ativo"],
+        },
+        "endpoints": {
+            "base_url":   base,
+            "consulta":   f"{base}/v1/consulta/{{tipo}}?query={{valor}}",
+            "tipos":      list(ENDPOINTS.keys()),
+        },
+        "integracao": {
+            "header":     "X-API-Key",
+            "header_value": key,
+            "exemplo_curl": f'curl -H "X-API-Key: {key}" "{base}/v1/consulta/cpf?query=000.000.000-00"',
+            "exemplo_js": {
+                "url":     f"{base}/v1/consulta/{{tipo}}?query={{valor}}",
+                "headers": {"X-API-Key": key},
+            },
+            "exemplo_python": {
+                "url":     f"{base}/v1/consulta/{{tipo}}",
+                "headers": {"X-API-Key": key},
+                "params":  {"query": "{valor}"},
+            },
+            "exemplo_env": f"UNICONTROLLER_KEY={key}\nUNICONTROLLER_URL={base}/v1/consulta",
+        },
+        "railway": {
+            "env_vars": {
+                "UNICONTROLLER_KEY": key,
+                "UNICONTROLLER_URL": f"{base}/v1/consulta",
+            }
+        },
+        "github_actions": {
+            "secret_name": "UNICONTROLLER_KEY",
+            "secret_value": key,
+            "uso_no_workflow": f'curl -H "X-API-Key: ${{{{ secrets.UNICONTROLLER_KEY }}}}" "{base}/v1/consulta/cpf?query=${{{{ inputs.cpf }}}}"',
+        },
+    }
+
+@api.get("/admin/export/all", dependencies=[Depends(admin_auth)])
+async def exportar_todas_keys(request: Request):
+    """Exporta todas as keys ativas com configuração completa."""
+    base = str(request.base_url).rstrip("/")
+    resultado = []
+    for k, v in api_keys.items():
+        if not v["ativo"]:
+            continue
+        resultado.append({
+            "api_key":      k,
+            "cliente":      v.get("cliente", v["nome"]),
+            "plano":        v.get("plano", "custom"),
+            "limite":       v["limite"],
+            "usado":        v["usado"],
+            "restante":     (v["limite"] - v["usado"]) if v["limite"] != -1 else -1,
+            "base_url":     f"{base}/v1/consulta",
+            "header":       {"X-API-Key": k},
+            "env":          f"UNICONTROLLER_KEY={k}",
+            "criado":       v["criado"],
+            "ultimo_uso":   v["ultimo_uso"],
+        })
+    return {"total": len(resultado), "keys": resultado}
+
+@api.get("/v1/me")
+async def minha_key(x_api_key: str = Header(...)):
+    """Retorna informações da própria key (para sistemas externos verificarem)."""
+    k = verificar_api_key(x_api_key)
+    key_data = api_keys[x_api_key]
+    return {
+        "ok":       True,
+        "cliente":  key_data.get("cliente", key_data["nome"]),
+        "plano":    key_data.get("plano", "custom"),
+        "limite":   key_data["limite"],
+        "usado":    key_data["usado"],
+        "restante": (key_data["limite"] - key_data["usado"]) if key_data["limite"] != -1 else -1,
+        "ativo":    key_data["ativo"],
+        "tipos_disponiveis": list(ENDPOINTS.keys()),
+    }
+
 @api.post("/admin/keys/plano", dependencies=[Depends(admin_auth)])
 async def criar_key_por_plano(cliente: str, plano: str, projetos: str = ""):
     """
@@ -896,7 +986,11 @@ async function loadClientes(){
             <td style="color:${k.limite===-1?'var(--green)':pct>80?'var(--red)':'var(--text)'}">${restante}</td>
             <td style="color:var(--muted);font-size:11px">${k.ultimo_uso||'nunca'}</td>
             <td><span class="tag ${k.ativo?'ativo':'inativo'}">${k.ativo?'ATIVA':'INATIVA'}</span></td>
-            <td><button class="btn btn-accent" style="font-size:10px;padding:4px 10px" onclick="copiarKeyFull('${k.key_full}',this)">📋</button></td>
+            <td style="display:flex;gap:4px">
+              <button class="btn btn-accent" style="font-size:10px;padding:4px 8px" title="Copiar key" onclick="copiarKeyFull('${k.key_full}',this)">📋</button>
+              <button class="btn btn-green" style="font-size:10px;padding:4px 8px" title="Exportar JSON" onclick="exportarKey('${k.key_full}')">⬇️</button>
+              <button class="btn" style="font-size:10px;padding:4px 8px;background:rgba(255,215,0,0.1);border:1px solid rgba(255,215,0,0.3);color:#ffd32a" title="Ver .env" onclick="verEnv('${k.key_full}','${k.cliente}')">⚙️</button>
+            </td>
           </tr>`;}).join('')}</tbody>
       </table>` : '<div class="empty">Nenhum cliente cadastrado ainda</div>';
   }catch(e){console.error(e)}
@@ -907,6 +1001,68 @@ function copiarKeyFull(key, btn){
   const orig = btn.textContent;
   btn.textContent='✅';
   setTimeout(()=>btn.textContent=orig, 1500);
+}
+
+async function exportarKey(key){
+  const adminKey = prompt('Informe sua API_SECRET para exportar:');
+  if(!adminKey) return;
+  try{
+    const d = await fetch(`/admin/export/key/${key}`, {headers:{'X-API-Key':adminKey}}).then(r=>r.json());
+    if(d.detail){alert('Erro: '+d.detail);return;}
+    const json = JSON.stringify(d, null, 2);
+    // Download do arquivo
+    const blob = new Blob([json], {type:'application/json'});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `unicontroller-${d.unicontroller.cliente}-key.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }catch(e){alert('Erro: '+e)}
+}
+
+async function exportarTodas(){
+  const adminKey = prompt('Informe sua API_SECRET para exportar todas as keys:');
+  if(!adminKey) return;
+  try{
+    const d = await fetch('/admin/export/all', {headers:{'X-API-Key':adminKey}}).then(r=>r.json());
+    if(d.detail){alert('Erro: '+d.detail);return;}
+    const json = JSON.stringify(d, null, 2);
+    const blob = new Blob([json], {type:'application/json'});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = 'unicontroller-todas-keys.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  }catch(e){alert('Erro: '+e)}
+}
+
+function verEnv(key, cliente){
+  const base = window.location.origin;
+  const txt =
+    `# Unicontroller — ${cliente}\n` +
+    `# Adicione estas variáveis no seu projeto\n\n` +
+    `UNICONTROLLER_KEY=${key}\n` +
+    `UNICONTROLLER_URL=${base}/v1/consulta\n\n` +
+    `# Uso:\n` +
+    `# GET ${UNICONTROLLER_URL}/{tipo}?query={valor}\n` +
+    `# Header: X-API-Key: ${UNICONTROLLER_KEY}`;
+  const modal = document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML=`
+    <div style="background:#0a1628;border:1px solid #0f2a4a;border-radius:12px;padding:24px;width:600px;max-width:95vw">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <span style="font-weight:700;color:#e8f4ff">⚙️ .env — ${cliente}</span>
+        <button onclick="this.closest('div[style*=fixed]').remove()" style="background:none;border:none;color:#4a7a9b;cursor:pointer;font-size:18px">✕</button>
+      </div>
+      <div style="background:#030810;border:1px solid #0f2a4a;border-radius:8px;padding:14px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#00d4ff;white-space:pre;overflow-x:auto">${txt}</div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button onclick="navigator.clipboard.writeText(txt);this.textContent='✅ Copiado!';setTimeout(()=>this.textContent='📋 Copiar .env',1500)" style="flex:1;padding:9px;background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.3);color:#00d4ff;border-radius:6px;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:12px">📋 Copiar .env</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e=>{ if(e.target===modal) modal.remove(); });
 }
 
 function buildDocs(){
