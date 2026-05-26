@@ -253,25 +253,63 @@ async def consultar_qualquer(tipo: str, query: str) -> dict:
 
 CAMPOS_IGNORADOS = {"status", "developer", "dev", "api", "version", "via", "source", "powered_by"}
 
-def formatar_resultado(data, profundidade=0) -> str:
+def _limpar_valor(v) -> str:
+    """Limpa e formata um valor para exibição."""
+    if v is None or v == "None" or v == "":
+        return "—"
+    s = str(v).strip()
+    # Remove links tel: gerados automaticamente
+    import re
+    s = re.sub(r'\[([^\]]+)\]\(tel:[^)]+\)', r'\1', s)
+    return s if s and s != "None" else "—"
+
+def formatar_resultado(data, profundidade=0, max_prof=3) -> str:
+    if profundidade > max_prof:
+        return ""
     if isinstance(data, dict):
         linhas = []
         for k, v in data.items():
             if k.lower() in CAMPOS_IGNORADOS: continue
-            if isinstance(v, (dict, list)):
-                linhas.append(f"{'  '*profundidade}<b>{k}:</b>")
-                linhas.append(formatar_resultado(v, profundidade + 1))
+            if v is None or v == "" or v == "None": continue
+            if isinstance(v, dict):
+                # Só mostra seções não vazias
+                sub = formatar_resultado(v, profundidade+1, max_prof)
+                if sub.strip():
+                    pad = "  " * profundidade
+                    linhas.append(f"{pad}<b>▸ {k.upper().replace('_',' ')}:</b>")
+                    linhas.append(sub)
+            elif isinstance(v, list):
+                if not v: continue
+                sub = formatar_resultado(v, profundidade+1, max_prof)
+                if sub.strip():
+                    pad = "  " * profundidade
+                    linhas.append(f"{pad}<b>▸ {k.upper().replace('_',' ')}:</b>")
+                    linhas.append(sub)
             else:
-                linhas.append(f"{'  '*profundidade}<b>{k}:</b> {v}")
-        return "\n".join(linhas)
+                val = _limpar_valor(v)
+                if val == "—": continue
+                pad = "  " * profundidade
+                chave = k.replace("_", " ").title()
+                linhas.append(f"{pad}<b>{chave}:</b> {val}")
+        return "\n".join(filter(None, linhas))
     elif isinstance(data, list):
         partes = []
         for i, item in enumerate(data[:5]):
-            partes.append(f"{'  '*profundidade}[{i+1}] {formatar_resultado(item, profundidade+1)}")
+            pad = "  " * profundidade
+            if isinstance(item, dict):
+                sub = formatar_resultado(item, profundidade, max_prof)
+                if sub.strip():
+                    partes.append(f"{pad}┌ <b>#{i+1}</b>")
+                    partes.append(sub)
+                    partes.append(f"{pad}└")
+            else:
+                val = _limpar_valor(item)
+                if val != "—":
+                    partes.append(f"{pad}• {val}")
         if len(data) > 5:
-            partes.append(f"{'  '*profundidade}... (+{len(data)-5} itens)")
-        return "\n".join(partes)
-    return str(data)
+            partes.append(f"{'  '*profundidade}<i>... +{len(data)-5} itens</i>")
+        return "\n".join(filter(None, partes))
+    return _limpar_valor(data)
 
 # ─── FastAPI ──────────────────────────────────────────────
 bot_app: Application = None
@@ -710,12 +748,95 @@ async def dashboard():
         return HTMLResponse(f.read())
 
 # ─── Handlers Telegram ────────────────────────────────────
+def formatar_laudo(data: dict) -> str:
+    """Formata laudo veicular de forma limpa e legível."""
+    lines = []
+    def v(val):
+        if val is None or str(val).strip() in ("None","","null","False"): return "—"
+        import re
+        s = re.sub(r'\[([^\]]+)\]\(tel:[^)]+\)', r'\1', str(val).strip())
+        return s or "—"
+
+    # Resumo geral
+    if "placa" in data: lines.append(f"🚗 <b>Placa:</b> {v(data.get('placa'))}")
+    if "total_registros" in data: lines.append(f"📋 <b>Total laudos:</b> {v(data.get('total_registros'))}")
+
+    laudo = data.get("laudo_recente", {})
+    detalhes = laudo.get("detalhes", {}) if laudo else {}
+    veiculo  = detalhes.get("veiculo", {}) if detalhes else {}
+    geral    = detalhes.get("geral", {}) if detalhes else {}
+    prop     = detalhes.get("proprietario", {}) if detalhes else {}
+    ecv      = detalhes.get("ecv", {}) if detalhes else {}
+    vistoria = data.get("laudo_recente", {}).get("dados_laudo", {}) if data.get("laudo_recente") else {}
+    dvistoria= detalhes.get("dados_vistoria", {}) if detalhes else {}
+
+    if geral:
+        lines.append("")
+        lines.append("📅 <b>VISTORIA</b>")
+        if v(geral.get("data_vistoria")) != "—":     lines.append(f"  Data: {v(geral.get('data_vistoria'))}")
+        if v(geral.get("data_hora_emissao")) != "—": lines.append(f"  Emissão: {v(geral.get('data_hora_emissao'))}")
+        if v(geral.get("validade_vistoria")) != "—": lines.append(f"  Validade: {v(geral.get('validade_vistoria'))}")
+
+    if veiculo and any(v(val) != "—" for val in veiculo.values()):
+        lines.append("")
+        lines.append("🚘 <b>VEÍCULO</b>")
+        campos_veiculo = [
+            ("marca_modelo","Modelo"), ("tipo_veiculo","Tipo"),
+            ("cor","Cor"), ("ano_fabricacao","Ano Fab."),
+            ("ano_modelo","Ano Mod."), ("combustivel","Combustível"),
+            ("chassi","Chassi"), ("motor","Motor"),
+            ("renavam","RENAVAM"), ("especie","Espécie"),
+            ("potencia","Potência"), ("cilindrada","Cilindrada"),
+        ]
+        for campo, label in campos_veiculo:
+            val = v(veiculo.get(campo))
+            if val != "—": lines.append(f"  {label}: {val}")
+
+    if prop and any(v(val) != "—" for val in prop.values()):
+        lines.append("")
+        lines.append("👤 <b>PROPRIETÁRIO</b>")
+        if v(prop.get("proprietario_nome")) != "—":      lines.append(f"  Nome: {v(prop.get('proprietario_nome'))}")
+        if v(prop.get("proprietario_cpf_cnpj")) != "—":  lines.append(f"  CPF/CNPJ: {v(prop.get('proprietario_cpf_cnpj'))}")
+        if v(prop.get("proprietario_municipio")) != "—": lines.append(f"  Município: {v(prop.get('proprietario_municipio'))}")
+        if v(prop.get("proprietario_uf")) != "—":        lines.append(f"  UF: {v(prop.get('proprietario_uf'))}")
+
+    if ecv and any(v(val) != "—" for val in ecv.values()):
+        lines.append("")
+        lines.append("🏢 <b>ECV (VISTORIADORA)</b>")
+        if v(ecv.get("ecv_razao_social")) != "—": lines.append(f"  Nome: {v(ecv.get('ecv_razao_social'))}")
+        if v(ecv.get("ecv_cnpj")) != "—":         lines.append(f"  CNPJ: {v(ecv.get('ecv_cnpj'))}")
+        if v(ecv.get("ecv_municipio")) != "—":    lines.append(f"  Cidade: {v(ecv.get('ecv_municipio'))}")
+        if v(ecv.get("ecv_uf")) != "—":           lines.append(f"  UF: {v(ecv.get('ecv_uf'))}")
+        if v(ecv.get("ecv_telefone")) != "—":     lines.append(f"  Tel: {v(ecv.get('ecv_telefone'))}")
+        if v(ecv.get("ecv_validade_portaria")) != "—": lines.append(f"  Validade portaria: {v(ecv.get('ecv_validade_portaria'))}")
+
+    if dvistoria:
+        lines.append("")
+        lines.append("🔍 <b>DADOS VISTORIA</b>")
+        if v(dvistoria.get("km")) != "—":             lines.append(f"  KM: {v(dvistoria.get('km'))}")
+        if v(dvistoria.get("numero_chassi")) != "—":  lines.append(f"  Chassi: {v(dvistoria.get('numero_chassi'))}")
+        if v(dvistoria.get("numero_motor")) != "—":   lines.append(f"  Motor: {v(dvistoria.get('numero_motor'))}")
+        if v(dvistoria.get("origem_motor")) != "—":   lines.append(f"  Origem motor: {v(dvistoria.get('origem_motor'))}")
+        if v(dvistoria.get("origem_chassi")) != "—":  lines.append(f"  Origem chassi: {v(dvistoria.get('origem_chassi'))}")
+        if v(dvistoria.get("numero_lacre")) != "—":   lines.append(f"  Lacre: {v(dvistoria.get('numero_lacre'))}")
+
+    # Histórico de laudos
+    laudos = data.get("laudos", [])
+    if laudos:
+        lines.append("")
+        lines.append(f"📜 <b>HISTÓRICO ({len(laudos)} laudos)</b>")
+        for i, l in enumerate(laudos[:5], 1):
+            lines.append(f"  {i}. {v(l.get('data_str'))} — {v(l.get('ecv'))}")
+
+    return "\n".join(lines) if lines else formatar_resultado(data)
+
 def _extrair_fotos(data, _fotos=None) -> list:
     """
     Percorre o JSON recursivamente procurando campos base64 de imagens.
     Remove os campos de foto do dict para não poluir o texto.
     Retorna lista de strings base64.
     """
+    import re as _re
     if _fotos is None:
         _fotos = []
 
@@ -724,21 +845,44 @@ def _extrair_fotos(data, _fotos=None) -> list:
         "image", "images", "foto_base64", "imagem_base64", "base64",
         "foto1", "foto2", "foto3", "foto4", "foto5",
         "url_foto", "thumbnail", "picture", "pictures",
+        "img", "imgs", "arquivo", "arquivos", "anexo", "anexos",
     }
+
+    B64_PATTERN = _re.compile(r'^[A-Za-z0-9+/]{100,}={0,2}$')
+
+    def _is_base64(v):
+        if not isinstance(v, str) or len(v) < 100:
+            return False
+        # Remove data:image prefix if present
+        s = v.split(',')[-1] if ',' in v else v
+        return bool(B64_PATTERN.match(s.replace('\n','').replace('\r','')))
+
+    def _clean_b64(v):
+        """Remove data:image/jpeg;base64, prefix if present."""
+        if ',' in v:
+            return v.split(',', 1)[1]
+        return v
 
     if isinstance(data, dict):
         keys_to_remove = []
         for k, v in list(data.items()):
-            if k.lower() in FOTO_CAMPOS:
-                if isinstance(v, str) and len(v) > 100:
-                    # Pode ser base64
-                    _fotos.append(v)
+            kl = k.lower()
+            if kl in FOTO_CAMPOS or 'foto' in kl or 'imag' in kl or 'photo' in kl or 'picture' in kl:
+                if _is_base64(v):
+                    _fotos.append(_clean_b64(v))
                     keys_to_remove.append(k)
                 elif isinstance(v, list):
+                    has_b64 = False
                     for item in v:
-                        if isinstance(item, str) and len(item) > 100:
-                            _fotos.append(item)
-                    keys_to_remove.append(k)
+                        if _is_base64(item):
+                            _fotos.append(_clean_b64(item))
+                            has_b64 = True
+                    if has_b64:
+                        keys_to_remove.append(k)
+                    else:
+                        _extrair_fotos(v, _fotos)
+                else:
+                    _extrair_fotos(v, _fotos)
             else:
                 _extrair_fotos(v, _fotos)
         for k in keys_to_remove:
@@ -930,11 +1074,16 @@ async def cb_receber_valor(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         fotos_b64 = _extrair_fotos(resultado)
 
+        if tipo in ("laudo_veicular", "laudo"):
+            corpo = formatar_laudo(resultado)
+        else:
+            corpo = formatar_resultado(resultado)
+
         texto = (
             "🦅 <b>Unicontroller</b>\n\n"
             f"✅ <b>{LABELS.get(tipo, tipo)}</b>\n"
             f"🔎 <code>{query_val}</code>\n\n"
-            f"{formatar_resultado(resultado)}" + rodape()
+            f"{corpo}" + rodape()
         )
         if len(texto) > 4000:
             texto = texto[:3900] + "\n\n<i>... resultado truncado</i>" + rodape()
