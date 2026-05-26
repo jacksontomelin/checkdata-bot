@@ -833,11 +833,11 @@ textarea{resize:vertical;min-height:80px}
     </div>
   </div>
   <div class="tabs">
-    <button class="tab active" id="tab-stats" onclick="goTab('stats')">📊 Stats</button>
-    <button class="tab" id="tab-consulta" onclick="goTab('consulta')">🔍 Consulta</button>
-    <button class="tab" id="tab-clientes" onclick="goTab('clientes')">👥 Clientes</button>
-    <button class="tab" id="tab-keys" onclick="goTab('keys')">🔑 API Keys</button>
-    <button class="tab" id="tab-docs" onclick="goTab('docs')">📄 Docs</button>
+    <button class="tab active" id="tab-stats" data-tab="stats">📊 Stats</button>
+    <button class="tab" id="tab-consulta" data-tab="consulta">🔍 Consulta</button>
+    <button class="tab" id="tab-clientes" data-tab="clientes">👥 Clientes</button>
+    <button class="tab" id="tab-keys" data-tab="keys">🔑 API Keys</button>
+    <button class="tab" id="tab-docs" data-tab="docs">📄 Docs</button>
   </div>
   <div class="header-right">
     <span id="lastUp" style="font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace"></span>
@@ -1475,6 +1475,12 @@ function loadAll(){ loadStats(); }
 
 // ═══ INIT ═══
 document.addEventListener("DOMContentLoaded", function(){
+  // Bind tab clicks via event delegation (avoid inline onclick escaping issues)
+  document.querySelectorAll(".tab[data-tab]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      goTab(this.getAttribute("data-tab"));
+    });
+  });
   loadStats();
   setInterval(loadStats, 15000);
 });
