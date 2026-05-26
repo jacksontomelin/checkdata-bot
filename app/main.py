@@ -36,7 +36,7 @@ ENDPOINTS = {
     "email":        "email_abreviado",
     "telefone":     "telefone_endereco",
     "vizinhos":     "vizinhos-online",
-    "placa":        "placa_completa",
+    "placa":        "placacompleta",
     "proprietario": "frota_cpf",
     "mae":          "mae",
     "pai":          "pai",
