@@ -250,6 +250,72 @@ async def root():
 async def ping():
     return {"status": "ok", "timestamp": datetime.now().isoformat()}
 
+# ─── Rotas individuais estilo checkdata ───────────────────
+# GET /consultas/cpf?query=valor&token=uc_xxx
+
+async def _consulta_token(tipo: str, query: str, token: str):
+    k = verificar_api_key(token)
+    try:
+        resultado = await consultar_checkdata(tipo, query)
+        consumir_key(token)
+        registrar_consulta(tipo, query, k["nome"], True, key=token)
+        return resultado
+    except Exception as e:
+        registrar_consulta(tipo, query, k["nome"], False, str(e), key=token)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api.get("/consultas/cpf")
+async def rota_cpf(query: str, token: str):
+    return await _consulta_token("cpf", query, token)
+
+@api.get("/consultas/cns")
+async def rota_cns(query: str, token: str):
+    return await _consulta_token("cns", query, token)
+
+@api.get("/consultas/cep")
+async def rota_cep(query: str, token: str):
+    return await _consulta_token("cep", query, token)
+
+@api.get("/consultas/cnpj")
+async def rota_cnpj(query: str, token: str):
+    return await _consulta_token("cnpj", query, token)
+
+@api.get("/consultas/nome")
+async def rota_nome(query: str, token: str):
+    return await _consulta_token("nome", query, token)
+
+@api.get("/consultas/email")
+async def rota_email(query: str, token: str):
+    return await _consulta_token("email", query, token)
+
+@api.get("/consultas/telefone")
+async def rota_telefone(query: str, token: str):
+    return await _consulta_token("telefone", query, token)
+
+@api.get("/consultas/vizinhos")
+async def rota_vizinhos(query: str, token: str):
+    return await _consulta_token("vizinhos", query, token)
+
+@api.get("/consultas/placa")
+async def rota_placa(query: str, token: str):
+    return await _consulta_token("placa", query, token)
+
+@api.get("/consultas/proprietario")
+async def rota_proprietario(query: str, token: str):
+    return await _consulta_token("proprietario", query, token)
+
+@api.get("/consultas/mae")
+async def rota_mae(query: str, token: str):
+    return await _consulta_token("mae", query, token)
+
+@api.get("/consultas/pai")
+async def rota_pai(query: str, token: str):
+    return await _consulta_token("pai", query, token)
+
+@api.get("/consultas/titulo")
+async def rota_titulo(query: str, token: str):
+    return await _consulta_token("titulo", query, token)
+
 # ─── Rota pública estilo fetchbrasil ──────────────────────
 # GET /?token=uc_xxx&api=cpf&query=valor
 @api.get("/api")
