@@ -68,11 +68,15 @@ async def consultar_checkdata(tipo: str, query: str) -> dict:
         r.raise_for_status()
         return r.json()
 
+CAMPOS_IGNORADOS = {"status", "developer", "dev", "api", "version", "via", "source", "powered_by"}
+
 def formatar_resultado(data, profundidade=0) -> str:
     """Converte JSON em texto legível para o Telegram."""
     if isinstance(data, dict):
         linhas = []
         for k, v in data.items():
+            if k.lower() in CAMPOS_IGNORADOS:
+                continue
             if isinstance(v, (dict, list)):
                 linhas.append(f"{'  '*profundidade}<b>{k}:</b>")
                 linhas.append(formatar_resultado(v, profundidade + 1))
