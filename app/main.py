@@ -19,9 +19,12 @@ logger = logging.getLogger(__name__)
 CHECKDATA_TOKEN = os.getenv("CHECKDATA_TOKEN", "unicontroller-api-completa")
 TELEGRAM_TOKEN  = os.getenv("TELEGRAM_BOT_TOKEN", "")
 API_SECRET      = os.getenv("API_SECRET", "minha-chave-secreta")
-WEBHOOK_URL     = os.getenv("WEBHOOK_URL", "")  # ex: https://seu-app.railway.app
+WEBHOOK_URL     = os.getenv("WEBHOOK_URL", "")
 
 CHECKDATA_BASE  = "https://checkdata.vip/api/consultas"
+
+AUTOR = "👨‍💻 Feito por <b>Jackson Tomelin</b>"
+SISTEMA = "🦅 <b>Unicontroller</b>"
 
 ENDPOINTS = {
     "cpf":          "cpf_basico",
@@ -55,7 +58,7 @@ LABELS = {
     "titulo":       "🗳️ Título Eleitor",
 }
 
-AGUARDANDO_VALOR = 1  # estado da conversa
+AGUARDANDO_VALOR = 1
 
 # ─── CheckData helper ─────────────────────────────────────
 async def consultar_checkdata(tipo: str, query: str) -> dict:
@@ -71,7 +74,6 @@ async def consultar_checkdata(tipo: str, query: str) -> dict:
 CAMPOS_IGNORADOS = {"status", "developer", "dev", "api", "version", "via", "source", "powered_by"}
 
 def formatar_resultado(data, profundidade=0) -> str:
-    """Converte JSON em texto legível para o Telegram."""
     if isinstance(data, dict):
         linhas = []
         for k, v in data.items():
@@ -85,13 +87,16 @@ def formatar_resultado(data, profundidade=0) -> str:
         return "\n".join(linhas)
     elif isinstance(data, list):
         partes = []
-        for i, item in enumerate(data[:5]):  # max 5 itens
+        for i, item in enumerate(data[:5]):
             partes.append(f"{'  '*profundidade}[{i+1}] {formatar_resultado(item, profundidade+1)}")
         if len(data) > 5:
             partes.append(f"{'  '*profundidade}... (+{len(data)-5} itens)")
         return "\n".join(partes)
     else:
         return str(data)
+
+def rodape() -> str:
+    return f"\n\n─────────────────\n{SISTEMA}\n{AUTOR}"
 
 # ─── FastAPI app ──────────────────────────────────────────
 bot_app: Application = None
@@ -122,37 +127,27 @@ async def lifespan(app: FastAPI):
     if bot_app:
         await bot_app.shutdown()
 
-api = FastAPI(title="CheckData API", version="1.0.0", lifespan=lifespan)
+api = FastAPI(title="Unicontroller API", version="1.0.0", lifespan=lifespan)
 api.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-# ─── Auth ─────────────────────────────────────────────────
 def verificar_chave(x_api_key: str = Header(...)):
     if x_api_key != API_SECRET:
         raise HTTPException(status_code=401, detail="Chave de API inválida.")
 
-# ─── Rotas REST ───────────────────────────────────────────
 @api.get("/")
 async def root():
-    return {"status": "ok", "endpoints": list(ENDPOINTS.keys())}
+    return {"sistema": "Unicontroller", "autor": "Jackson Tomelin", "endpoints": list(ENDPOINTS.keys())}
 
 @api.get("/consulta/{tipo}")
 async def consulta(tipo: str, query: str, _=Depends(verificar_chave)):
-    """
-    Consulta qualquer tipo de dado.
-    - **tipo**: cpf | cns | cep | cnpj | nome | email | telefone | vizinhos | placa | proprietario | mae | pai | titulo
-    - **query**: valor a consultar
-    - **Header X-API-Key**: sua chave secreta
-    """
     return await consultar_checkdata(tipo, query)
 
 @api.get("/consulta/{tipo}/raw")
 async def consulta_raw(tipo: str, query: str):
-    """Rota pública sem autenticação (use com cuidado)."""
     return await consultar_checkdata(tipo, query)
 
 @api.post("/webhook")
 async def telegram_webhook(update: dict):
-    """Recebe updates do Telegram via webhook."""
     if bot_app:
         await bot_app.process_update(Update.de_json(update, bot_app.bot))
     return {"ok": True}
@@ -164,8 +159,8 @@ async def listar_endpoints():
 # ─── Handlers do Telegram ─────────────────────────────────
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_html(
-        "🔍 <b>CheckData Bot</b>\n\n"
-        "Consulte dados completos direto pelo Telegram!\n\n"
+        f"{SISTEMA}\n"
+        "Sistema de Consultas\n\n"
         "📋 <b>Comandos disponíveis:</b>\n\n"
         "👤 <code>/cpf 000.000.000-00</code>\n"
         "🏢 <code>/cnpj 00.000.000/0001-00</code>\n"
@@ -181,13 +176,16 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "👨 <code>/pai Nome do Pai</code>\n"
         "🗳️ <code>/titulo 000000000000</code>\n\n"
         "Ou use /menu para botões interativos."
+        f"{rodape()}"
     )
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cmds = "\n".join([f"<code>/{k} &lt;valor&gt;</code> — {v}" for k, v in LABELS.items()])
     await update.message.reply_html(
-        f"📋 <b>Comandos disponíveis:</b>\n\n{cmds}\n\n"
+        f"{SISTEMA} — Ajuda\n\n"
+        f"📋 <b>Todos os comandos:</b>\n\n{cmds}\n\n"
         "Ou use /menu para botões interativos."
+        f"{rodape()}"
     )
 
 async def cmd_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -198,8 +196,8 @@ async def cmd_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if i + 1 < len(tipos):
             row.append(InlineKeyboardButton(tipos[i+1][1], callback_data=f"tipo:{tipos[i+1][0]}"))
         keyboard.append(row)
-    await update.message.reply_text(
-        "🔍 Escolha o tipo de consulta:",
+    await update.message.reply_html(
+        f"{SISTEMA}\n\n🔍 Escolha o tipo de consulta:{rodape()}",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -208,18 +206,25 @@ async def cmd_consulta_direta(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_html(
             f"ℹ️ Use: <code>/{tipo} &lt;valor&gt;</code>\n"
             f"Exemplo: <code>/{tipo} {_exemplos(tipo)}</code>"
+            f"{rodape()}"
         )
         return
     query = " ".join(context.args)
     msg = await update.message.reply_text("⏳ Consultando...")
     try:
         resultado = await consultar_checkdata(tipo, query)
-        texto = f"✅ <b>{LABELS[tipo]}</b>\n<code>{query}</code>\n\n{formatar_resultado(resultado)}"
+        texto = (
+            f"{SISTEMA}\n\n"
+            f"✅ <b>{LABELS[tipo]}</b>\n"
+            f"🔎 <code>{query}</code>\n\n"
+            f"{formatar_resultado(resultado)}"
+            f"{rodape()}"
+        )
         if len(texto) > 4000:
-            texto = texto[:3900] + "\n\n<i>... resultado truncado</i>"
+            texto = texto[:3900] + "\n\n<i>... resultado truncado</i>" + rodape()
         await msg.edit_text(texto, parse_mode="HTML")
     except Exception as e:
-        await msg.edit_text(f"❌ Erro: {str(e)}")
+        await msg.edit_text(f"❌ Erro: {str(e)}{rodape()}", parse_mode="HTML")
 
 async def cb_tipo_selecionado(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -230,6 +235,7 @@ async def cb_tipo_selecionado(update: Update, context: ContextTypes.DEFAULT_TYPE
         f"✏️ Você escolheu <b>{LABELS[tipo]}</b>\n\n"
         f"Digite o valor para consultar:\n"
         f"<i>Exemplo: {_exemplos(tipo)}</i>"
+        f"{rodape()}"
     )
     return AGUARDANDO_VALOR
 
@@ -241,16 +247,22 @@ async def cb_receber_valor(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text("⏳ Consultando...")
     try:
         resultado = await consultar_checkdata(tipo, query_val)
-        texto = f"✅ <b>{LABELS[tipo]}</b>\n<code>{query_val}</code>\n\n{formatar_resultado(resultado)}"
+        texto = (
+            f"{SISTEMA}\n\n"
+            f"✅ <b>{LABELS[tipo]}</b>\n"
+            f"🔎 <code>{query_val}</code>\n\n"
+            f"{formatar_resultado(resultado)}"
+            f"{rodape()}"
+        )
         if len(texto) > 4000:
-            texto = texto[:3900] + "\n\n<i>... resultado truncado</i>"
+            texto = texto[:3900] + "\n\n<i>... resultado truncado</i>" + rodape()
         await msg.edit_text(texto, parse_mode="HTML")
     except Exception as e:
-        await msg.edit_text(f"❌ Erro: {str(e)}")
+        await msg.edit_text(f"❌ Erro: {str(e)}{rodape()}", parse_mode="HTML")
     return ConversationHandler.END
 
 async def cmd_cancelar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("❌ Consulta cancelada.")
+    await update.message.reply_html(f"❌ Consulta cancelada.{rodape()}")
     return ConversationHandler.END
 
 def _exemplos(tipo: str) -> str:
