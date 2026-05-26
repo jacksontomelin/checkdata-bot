@@ -298,6 +298,8 @@ async def lifespan(app: FastAPI):
             bot_app.add_handler(CommandHandler(tipo, lambda u, c, t=tipo: cmd_consulta_direta(u, c, t)))
         for tipo in ENDPOINTS_EXTERNOS:
             bot_app.add_handler(CommandHandler(tipo, lambda u, c, t=tipo: cmd_consulta_direta(u, c, t)))
+        # Alias curtos
+        bot_app.add_handler(CommandHandler("laudo", lambda u, c: cmd_consulta_direta(u, c, "laudo_veicular")))
         bot_app.add_handler(ConversationHandler(
             entry_points=[CallbackQueryHandler(cb_tipo_selecionado, pattern="^tipo:")],
             states={AGUARDANDO_VALOR: [MessageHandler(filters.TEXT & ~filters.COMMAND, cb_receber_valor)]},
@@ -764,7 +766,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "👩 <code>/mae Nome da Mãe</code>\n"
         "👨 <code>/pai Nome do Pai</code>\n"
         "🗳️ <code>/titulo 000000000000</code>\n"
-        "📋 <code>/laudo_veicular ABC1234</code>\n\n"
+        "📋 <code>/laudo ABC1234</code> ou <code>/laudo_veicular ABC1234</code>\n\n"
         "📊 <code>/stats</code> — Estatísticas\n"
         "🔑 <code>/keys</code> — Listar API Keys\n"
         "➕ <code>/newkey nome limite</code> — Criar Key\n\n"
@@ -969,7 +971,7 @@ def _exemplos(tipo: str) -> str:
         "cnpj":"00.000.000/0001-00","nome":"João Silva","email":"joao@email.com",
         "telefone":"11999999999","vizinhos":"01310-100","placa":"ABC1234",
         "proprietario":"123.456.789-00","mae":"Maria Silva","pai":"José Silva",
-        "titulo":"000000000000","laudo_veicular":"ABC1234",
+        "titulo":"000000000000","laudo_veicular":"ABC1234","laudo":"ABC1234",
     }
     return ex.get(tipo, "valor")
 
