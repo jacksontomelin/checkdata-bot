@@ -1,0 +1,768 @@
+DASH = """<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Unicontroller — Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#050d1a;--surface:#0a1628;--surface2:#0d1e38;--border:#0f2a4a;
+  --accent:#00d4ff;--green:#00e676;--red:#ff4757;--yellow:#ffd32a;
+  --purple:#bf5af2;--orange:#ff9f43;--text:#e8f4ff;--muted:#4a7a9b;
+}
+body{background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif;min-height:100vh}
+a{color:inherit;text-decoration:none}
+/* ─── Header ─── */
+header{padding:16px 28px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:rgba(10,22,40,0.98);position:sticky;top:0;z-index:200;backdrop-filter:blur(12px)}
+.logo{display:flex;align-items:center;gap:12px}
+.logo-icon{font-size:26px}
+.logo-text{font-size:17px;font-weight:700;letter-spacing:1px}
+.logo-text span{color:var(--accent)}
+.logo-sub{font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:1px}
+.tabs{display:flex;gap:3px;background:rgba(0,0,0,0.4);padding:4px;border-radius:8px}
+.tab{padding:7px 16px;border-radius:5px;cursor:pointer;font-size:11px;letter-spacing:1px;border:none;background:transparent;color:var(--muted);font-family:'Space Grotesk',sans-serif;transition:all .18s;white-space:nowrap}
+.tab.active{background:var(--accent);color:#000;font-weight:700}
+.header-right{display:flex;align-items:center;gap:10px}
+.live-badge{padding:4px 12px;border-radius:20px;font-size:10px;font-family:'JetBrains Mono',monospace;background:rgba(0,230,118,0.1);border:1px solid rgba(0,230,118,0.3);color:var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+/* ─── Layout ─── */
+main{padding:22px 28px;max-width:1400px;margin:0 auto}
+.page{display:none}.page.active{display:block}
+/* ─── Cards ─── */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;position:relative;overflow:hidden;transition:border-color .2s,transform .2s}
+.card:hover{border-color:var(--accent);transform:translateY(-2px)}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.c1::before{background:var(--accent)}.c2::before{background:var(--green)}
+.c3::before{background:var(--red)}.c4::before{background:var(--yellow)}
+.c5::before{background:var(--purple)}.c6::before{background:var(--orange)}
+.card-label{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:7px;font-family:'JetBrains Mono',monospace}
+.card-value{font-size:32px;font-weight:700;font-family:'JetBrains Mono',monospace;line-height:1}
+.c1 .card-value{color:var(--accent)}.c2 .card-value{color:var(--green)}
+.c3 .card-value{color:var(--red)}.c4 .card-value{color:var(--yellow)}
+.c5 .card-value{color:var(--purple)}.c6 .card-value{color:var(--orange)}
+.card-icon{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:30px;opacity:.1}
+/* ─── Panels ─── */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.grid3{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px}
+.panel-title{font-size:10px;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:14px;font-family:'JetBrains Mono',monospace;display:flex;align-items:center;justify-content:space-between}
+.panel-title-left{display:flex;align-items:center;gap:8px}
+.panel-title-left::before{content:'';width:3px;height:12px;background:var(--accent);border-radius:2px;display:inline-block}
+canvas{max-height:190px}
+/* ─── Tables ─── */
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{text-align:left;padding:8px 10px;color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:8px 10px;border-bottom:1px solid rgba(15,42,74,0.5);font-family:'JetBrains Mono',monospace;vertical-align:middle}
+tr:hover td{background:rgba(0,212,255,0.03)}
+/* ─── Tags ─── */
+.tag{padding:2px 8px;border-radius:20px;font-size:9px;font-weight:700;letter-spacing:1px;white-space:nowrap}
+.tag-ok{background:rgba(0,230,118,0.12);color:var(--green);border:1px solid rgba(0,230,118,0.25)}
+.tag-fail{background:rgba(255,71,87,0.12);color:var(--red);border:1px solid rgba(255,71,87,0.25)}
+.tag-on{background:rgba(0,212,255,0.12);color:var(--accent);border:1px solid rgba(0,212,255,0.25)}
+.tag-off{background:rgba(255,71,87,0.07);color:var(--red);border:1px solid rgba(255,71,87,0.15)}
+/* ─── Buttons ─── */
+.btn{padding:7px 14px;border-radius:6px;cursor:pointer;font-size:11px;font-family:'JetBrains Mono',monospace;letter-spacing:1px;transition:all .18s;border:1px solid transparent;white-space:nowrap}
+.btn-a{background:rgba(0,212,255,0.1);border-color:rgba(0,212,255,0.3);color:var(--accent)}.btn-a:hover{background:rgba(0,212,255,0.22)}
+.btn-g{background:rgba(0,230,118,0.1);border-color:rgba(0,230,118,0.3);color:var(--green)}.btn-g:hover{background:rgba(0,230,118,0.22)}
+.btn-r{background:rgba(255,71,87,0.1);border-color:rgba(255,71,87,0.3);color:var(--red)}.btn-r:hover{background:rgba(255,71,87,0.22)}
+.btn-y{background:rgba(255,211,42,0.1);border-color:rgba(255,211,42,0.3);color:var(--yellow)}.btn-y:hover{background:rgba(255,211,42,0.22)}
+.btn-sm{padding:4px 9px;font-size:10px}
+/* ─── Forms ─── */
+.form-row{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:flex-end}
+.form-group{display:flex;flex-direction:column;gap:5px}
+.form-group label{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-family:'JetBrains Mono',monospace}
+input,select,textarea{background:#060e1a;border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:12px;outline:none;transition:border-color .2s}
+input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+textarea{resize:vertical;min-height:80px}
+/* ─── Key box ─── */
+.key-box{background:#030810;border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent);word-break:break-all;cursor:pointer;transition:border-color .2s,color .2s}
+.key-box:hover{border-color:var(--accent)}
+/* ─── Bars ─── */
+.bar-item{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.bar-label{font-size:11px;min-width:110px;color:var(--text)}
+.bar-track{flex:1;background:rgba(255,255,255,0.05);border-radius:4px;height:6px;overflow:hidden}
+.bar-fill{height:100%;background:linear-gradient(90deg,var(--accent),#0099bb);border-radius:4px;transition:width .6s}
+.bar-count{font-size:11px;color:var(--accent);min-width:26px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:700}
+/* ─── Progress ─── */
+.prog{background:rgba(255,255,255,0.05);border-radius:4px;height:4px;overflow:hidden;margin-top:3px}
+.prog-fill{height:100%;border-radius:4px;transition:width .4s}
+/* ─── Consulta panel ─── */
+.consulta-input{display:flex;gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.tipo-badge{background:#0a1827;padding:0 14px;display:flex;align-items:center;border-right:1px solid var(--border);font-size:11px;color:var(--accent);letter-spacing:1px;white-space:nowrap}
+.consulta-input input{flex:1;background:#060e1a;border:none;outline:none;color:var(--text);padding:12px 16px;font-family:'JetBrains Mono',monospace;font-size:13px}
+.consulta-input button{background:linear-gradient(135deg,#0284c7,#00d4ff);border:none;cursor:pointer;padding:0 22px;color:#000;font-size:11px;letter-spacing:2px;font-weight:700;font-family:'JetBrains Mono',monospace;transition:opacity .2s}
+.consulta-input button:hover{opacity:.85}
+.consulta-input button:disabled{opacity:.4;cursor:not-allowed}
+.url-preview{font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:6px}
+.resultado-box{background:#030810;border:1px solid var(--border);border-radius:8px;padding:16px;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.8;max-height:480px;overflow-y:auto;margin-top:14px}
+.json-key{color:#7dd3fc}.json-str{color:#fcd34d}.json-num{color:#34d399}.json-bool{color:#f472b6}.json-null{color:var(--muted)}
+/* ─── Result tabs ─── */
+.rtabs{display:flex;gap:4px;margin-bottom:12px}
+.rtab{padding:5px 14px;border-radius:5px;cursor:pointer;font-size:11px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:'JetBrains Mono',monospace;transition:all .18s}
+.rtab.active{background:var(--accent);color:#000;border-color:var(--accent);font-weight:700}
+/* ─── Modal ─── */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px;width:640px;max-width:100%;max-height:90vh;overflow-y:auto}
+.modal-title{font-size:14px;font-weight:700;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center}
+.modal-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:20px;padding:0 4px;transition:color .2s}
+.modal-close:hover{color:var(--text)}
+/* ─── Misc ─── */
+.empty{text-align:center;padding:40px;color:var(--muted);font-size:13px}
+.sep{border:none;border-top:1px solid var(--border);margin:16px 0}
+.spin{display:inline-block;width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.alert{padding:10px 14px;border-radius:8px;font-size:12px;margin-bottom:14px}
+.alert-ok{background:rgba(0,230,118,0.08);border:1px solid rgba(0,230,118,0.25);color:var(--green)}
+.alert-err{background:rgba(255,71,87,0.08);border:1px solid rgba(255,71,87,0.25);color:var(--red)}
+@media(max-width:900px){.grid2,.grid3{grid-template-columns:1fr}.tabs{overflow-x:auto}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🦅</div>
+    <div>
+      <div class="logo-text">Uni<span>controller</span></div>
+      <div class="logo-sub">Developer: Jackson Tomelin</div>
+    </div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" onclick="goTab('stats',this)">📊 Stats</button>
+    <button class="tab" onclick="goTab('consulta',this)">🔍 Consulta</button>
+    <button class="tab" onclick="goTab('clientes',this)">👥 Clientes</button>
+    <button class="tab" onclick="goTab('keys',this)">🔑 API Keys</button>
+    <button class="tab" onclick="goTab('docs',this)">📄 Docs</button>
+  </div>
+  <div class="header-right">
+    <span id="lastUp" style="font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace"></span>
+    <span class="live-badge">● LIVE</span>
+    <button class="btn btn-a" onclick="loadAll()">↻</button>
+  </div>
+</header>
+
+<main>
+
+<!-- ════════ STATS ════════ -->
+<div class="page active" id="page-stats">
+  <div class="cards">
+    <div class="card c1"><div class="card-label">Total</div><div class="card-value" id="cTotal">—</div><div class="card-icon">🔢</div></div>
+    <div class="card c2"><div class="card-label">Sucesso</div><div class="card-value" id="cSucesso">—</div><div class="card-icon">✅</div></div>
+    <div class="card c3"><div class="card-label">Erros</div><div class="card-value" id="cErro">—</div><div class="card-icon">❌</div></div>
+    <div class="card c4"><div class="card-label">Hoje</div><div class="card-value" id="cHoje">—</div><div class="card-icon">📅</div></div>
+    <div class="card c5"><div class="card-label">Taxa Sucesso</div><div class="card-value" id="cTaxa">—</div><div class="card-icon">📈</div></div>
+    <div class="card c6"><div class="card-label">Keys Ativas</div><div class="card-value" id="cKeysA">—</div><div class="card-icon">🔑</div></div>
+  </div>
+  <div class="grid2">
+    <div class="panel"><div class="panel-title"><span class="panel-title-left">Consultas por Dia (7 dias)</span></div><canvas id="chartDia"></canvas></div>
+    <div class="panel"><div class="panel-title"><span class="panel-title-left">Consultas por Hora</span></div><canvas id="chartHora"></canvas></div>
+  </div>
+  <div class="grid3">
+    <div class="panel">
+      <div class="panel-title">
+        <span class="panel-title-left">Histórico Recente</span>
+      </div>
+      <div class="table-wrap" id="historicoWrap"><div class="empty">Nenhuma consulta ainda</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><span class="panel-title-left">Ranking por Tipo</span></div>
+      <div id="rankingTipo"><div class="empty">—</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ CONSULTA ════════ -->
+<div class="page" id="page-consulta">
+  <div class="grid2" style="margin-bottom:16px">
+    <!-- Painel de consulta -->
+    <div class="panel">
+      <div class="panel-title"><span class="panel-title-left">Fazer Consulta</span></div>
+
+      <div class="form-row" style="margin-bottom:12px">
+        <div class="form-group" style="flex:1">
+          <label>Tipo de consulta</label>
+          <select id="cTipo" onchange="atualizarTipo()">
+            <option value="cpf">👤 CPF</option>
+            <option value="cnpj">🏢 CNPJ</option>
+            <option value="cep">📍 CEP</option>
+            <option value="cns">🏥 CNS</option>
+            <option value="nome">🔤 Nome</option>
+            <option value="email">✉️ E-mail</option>
+            <option value="telefone">📞 Telefone</option>
+            <option value="vizinhos">🏘️ Vizinhos</option>
+            <option value="placa">🚗 Veículo (Placa)</option>
+            <option value="proprietario">🔑 Proprietário (CPF)</option>
+            <option value="mae">👩 Nome da Mãe</option>
+            <option value="pai">👨 Nome do Pai</option>
+            <option value="titulo">🗳️ Título de Eleitor</option>
+          </select>
+        </div>
+        <div class="form-group" style="flex:1">
+          <label>API Key</label>
+          <input id="cApiKey" placeholder="uc_sua_chave_aqui" type="password">
+        </div>
+      </div>
+
+      <div class="consulta-input">
+        <div class="tipo-badge" id="tipoBadge">👤 CPF</div>
+        <input id="cQuery" placeholder="000.000.000-00" onkeydown="if(event.key==='Enter')fazerConsulta()" oninput="atualizarUrl()">
+        <button onclick="fazerConsulta()" id="btnConsultar">CONSULTAR</button>
+      </div>
+      <div class="url-preview" id="urlPreview">GET /v1/consulta/cpf?query=<valor></div>
+
+      <div id="consultaStatus" style="margin-top:12px;display:none"></div>
+    </div>
+
+    <!-- Histórico de consultas da sessão -->
+    <div class="panel">
+      <div class="panel-title">
+        <span class="panel-title-left">Sessão Atual</span>
+        <button class="btn btn-r btn-sm" onclick="sessao=[];renderSessao()">Limpar</button>
+      </div>
+      <div id="sessaoWrap"><div class="empty" style="padding:20px">Nenhuma consulta ainda</div></div>
+    </div>
+  </div>
+
+  <!-- Resultado -->
+  <div class="panel" id="resultadoPanel" style="display:none">
+    <div class="panel-title">
+      <span class="panel-title-left" id="resultadoTitulo">Resultado</span>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-a btn-sm" onclick="copiarResultado()">📋 Copiar JSON</button>
+        <button class="btn btn-g btn-sm" onclick="downloadResultado()">⬇️ Download</button>
+      </div>
+    </div>
+    <div class="rtabs">
+      <button class="rtab active" onclick="switchRtab('formatado',this)">Formatado</button>
+      <button class="rtab" onclick="switchRtab('raw',this)">JSON Raw</button>
+    </div>
+    <div class="resultado-box" id="resultadoFormatado"></div>
+    <div class="resultado-box" id="resultadoRaw" style="display:none"></div>
+  </div>
+</div>
+
+<!-- ════════ CLIENTES ════════ -->
+<div class="page" id="page-clientes">
+  <div class="cards" id="planosCards"></div>
+  <div class="panel" style="margin-bottom:16px">
+    <div class="panel-title"><span class="panel-title-left">Novo Cliente</span></div>
+    <div class="form-row">
+      <div class="form-group" style="flex:2;min-width:180px">
+        <label>Nome do cliente / empresa</label>
+        <input id="kNome" placeholder="Ex: João Silva, Empresa X">
+      </div>
+      <div class="form-group" style="min-width:170px">
+        <label>Plano</label>
+        <select id="kPlano" onchange="toggleCustom()">
+          <option value="basico">Básico — 500 consultas</option>
+          <option value="pro">Pro — 2.000 consultas</option>
+          <option value="premium">Premium — 10.000 consultas</option>
+          <option value="ilimitado">Ilimitado — ∞</option>
+          <option value="custom">Personalizado</option>
+        </select>
+      </div>
+      <div class="form-group" id="customLimiteGroup" style="min-width:140px;display:none">
+        <label>Limite personalizado</label>
+        <input id="kLimite" type="number" placeholder="Ex: 1500">
+      </div>
+      <div class="form-group" style="flex:1;min-width:130px">
+        <label>Tags / projetos</label>
+        <input id="kProjetos" placeholder="site,app,railway">
+      </div>
+      <div class="form-group">
+        <label>&nbsp;</label>
+        <button class="btn btn-g" onclick="criarCliente()">➕ GERAR KEY</button>
+      </div>
+    </div>
+    <div id="novaKeyResult" style="display:none"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">
+      <span class="panel-title-left">Clientes Cadastrados</span>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-a btn-sm" onclick="exportarTodas()">⬇️ Exportar Todas</button>
+        <button class="btn btn-a btn-sm" onclick="loadClientes()">↻ Atualizar</button>
+      </div>
+    </div>
+    <div id="clientesWrap"><div class="empty">Carregando...</div></div>
+  </div>
+</div>
+
+<!-- ════════ API KEYS ════════ -->
+<div class="page" id="page-keys">
+  <div class="panel" style="margin-bottom:16px">
+    <div class="panel-title"><span class="panel-title-left">Gerenciar Keys</span></div>
+    <div class="form-row">
+      <div class="form-group" style="flex:2;min-width:180px">
+        <label>Nome / Identificador</label>
+        <input id="aKNome" placeholder="nome-do-projeto">
+      </div>
+      <div class="form-group" style="min-width:160px">
+        <label>Limite (-1 = ilimitado)</label>
+        <input id="aKLimite" type="number" value="-1">
+      </div>
+      <div class="form-group" style="flex:1;min-width:130px">
+        <label>Projetos (separados por vírgula)</label>
+        <input id="aKProjetos" placeholder="railway,github">
+      </div>
+      <div class="form-group">
+        <label>&nbsp;</label>
+        <button class="btn btn-g" onclick="criarKeyRaw()">➕ CRIAR</button>
+      </div>
+    </div>
+    <div id="rawKeyResult" style="display:none"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">
+      <span class="panel-title-left">Todas as Keys</span>
+      <button class="btn btn-a btn-sm" onclick="loadKeys()">↻ Atualizar</button>
+    </div>
+    <div id="keysWrap"><div class="empty">Carregando...</div></div>
+  </div>
+</div>
+
+<!-- ════════ DOCS ════════ -->
+<div class="page" id="page-docs">
+  <div class="panel" style="margin-bottom:16px">
+    <div class="panel-title"><span class="panel-title-left">Integração Externa</span></div>
+    <div style="font-size:12px;line-height:2;color:#b0c8e0;margin-bottom:14px">
+      Use a Unicontroller API em qualquer projeto com uma API Key. Suporta Railway, GitHub Actions, Node.js, Python, PHP e mais.
+    </div>
+    <div style="margin-bottom:10px;font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;font-family:'JetBrains Mono',monospace">Base URL</div>
+    <div class="key-box" id="docsBase" onclick="copiarTexto(this)" style="margin-bottom:16px;font-size:13px"></div>
+
+    <div style="margin-bottom:10px;font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;font-family:'JetBrains Mono',monospace">Autenticação</div>
+    <div class="key-box" style="margin-bottom:16px;color:#b0c8e0">Header: <span style="color:var(--accent)">X-API-Key: uc_sua_chave_aqui</span></div>
+
+    <div style="margin-bottom:10px;font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;font-family:'JetBrains Mono',monospace">Tipos disponíveis</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">
+      <span class="tag tag-on">cpf</span><span class="tag tag-on">cnpj</span><span class="tag tag-on">cep</span>
+      <span class="tag tag-on">cns</span><span class="tag tag-on">nome</span><span class="tag tag-on">email</span>
+      <span class="tag tag-on">telefone</span><span class="tag tag-on">vizinhos</span><span class="tag tag-on">placa</span>
+      <span class="tag tag-on">proprietario</span><span class="tag tag-on">mae</span><span class="tag tag-on">pai</span>
+      <span class="tag tag-on">titulo</span>
+    </div>
+
+    <div style="margin-bottom:10px;font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;font-family:'JetBrains Mono',monospace">Rotas</div>
+    <table style="margin-bottom:16px">
+      <thead><tr><th>Método</th><th>Rota</th><th>Auth</th><th>Descrição</th></tr></thead>
+      <tbody>
+        <tr><td><span class="tag tag-on">GET</span></td><td>/v1/consulta/{tipo}?query=valor</td><td><span class="tag tag-ok">KEY</span></td><td>Consulta com metadados</td></tr>
+        <tr><td><span class="tag tag-on">GET</span></td><td>/v1/consulta/{tipo}/raw?query=valor</td><td><span class="tag tag-ok">KEY</span></td><td>JSON bruto</td></tr>
+        <tr><td><span class="tag tag-on">GET</span></td><td>/v1/me</td><td><span class="tag tag-ok">KEY</span></td><td>Info da sua key</td></tr>
+        <tr><td><span class="tag tag-on">GET</span></td><td>/ping</td><td>—</td><td>Health check</td></tr>
+        <tr><td><span class="tag tag-on">GET</span></td><td>/api/stats</td><td>—</td><td>Estatísticas</td></tr>
+        <tr><td><span class="tag tag-on">POST</span></td><td>/admin/keys</td><td><span class="tag tag-fail">ADMIN</span></td><td>Criar key</td></tr>
+        <tr><td><span class="tag tag-on">GET</span></td><td>/admin/export/key/{key}</td><td><span class="tag tag-fail">ADMIN</span></td><td>Exportar key JSON</td></tr>
+        <tr><td><span class="tag tag-on">GET</span></td><td>/admin/export/all</td><td><span class="tag tag-fail">ADMIN</span></td><td>Exportar todas</td></tr>
+      </tbody>
+    </table>
+
+    <div id="docsExemplos"></div>
+  </div>
+</div>
+
+</main>
+
+<!-- ════════ MODAL ════════ -->
+<div id="modalBg" class="modal-bg" style="display:none" onclick="if(event.target===this)fecharModal()">
+  <div class="modal">
+    <div class="modal-title">
+      <span id="modalTitulo"></span>
+      <button class="modal-close" onclick="fecharModal()">✕</button>
+    </div>
+    <div id="modalConteudo"></div>
+  </div>
+</div>
+
+<script>
+const BASE = window.location.origin;
+const TIPOS_LABELS = {
+  cpf:'👤 CPF',cnpj:'🏢 CNPJ',cep:'📍 CEP',cns:'🏥 CNS',
+  nome:'🔤 Nome',email:'✉️ E-mail',telefone:'📞 Telefone',
+  vizinhos:'🏘️ Vizinhos',placa:'🚗 Veículo',proprietario:'🔑 Proprietário',
+  mae:'👩 Mãe',pai:'👨 Pai',titulo:'🗳️ Título'
+};
+const TIPOS_EX = {
+  cpf:'123.456.789-00',cnpj:'00.000.000/0001-00',cep:'01310-100',
+  cns:'123456789012345',nome:'João Silva',email:'joao@email.com',
+  telefone:'11999999999',vizinhos:'01310-100',placa:'ABC1234',
+  proprietario:'123.456.789-00',mae:'Maria Silva',pai:'José Silva',titulo:'000000000000'
+};
+const PLANOS_INFO = {
+  basico:   {nome:'Básico',   limite:500,   preco:'R$ 29,90', cor:'#00d4ff'},
+  pro:      {nome:'Pro',      limite:2000,  preco:'R$ 79,90', cor:'#00e676'},
+  premium:  {nome:'Premium',  limite:10000, preco:'R$ 199,90',cor:'#bf5af2'},
+  ilimitado:{nome:'Ilimitado',limite:-1,    preco:'R$ 399,90',cor:'#ffd32a'},
+  custom:   {nome:'Custom',   limite:-1,    preco:'—',        cor:'#ff9f43'},
+};
+
+let chartDia=null, chartHora=null, sessao=[], lastResult=null, adminKey='';
+
+// ── Auth helper ──
+function getAdmin(){
+  if(!adminKey) adminKey = prompt('API_SECRET (chave admin):') || '';
+  return adminKey;
+}
+function clearAdmin(){ adminKey = ''; }
+
+// ── Tab navigation ──
+function goTab(t, btn){
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('page-'+t).classList.add('active');
+  if(t==='stats')    loadStats();
+  if(t==='clientes') loadClientes();
+  if(t==='keys')     loadKeys();
+  if(t==='docs')     buildDocs();
+}
+
+// ── Charts ──
+const chartCfg = (labels, data, color) => ({
+  type:'line',
+  data:{labels,datasets:[{data,borderColor:color,backgroundColor:color+'15',fill:true,tension:.4,pointRadius:3,pointBackgroundColor:color,borderWidth:2}]},
+  options:{responsive:true,plugins:{legend:{display:false}},scales:{
+    x:{grid:{color:'#0f2a4a'},ticks:{color:'#4a7a9b',font:{size:9,family:'JetBrains Mono'}}},
+    y:{grid:{color:'#0f2a4a'},ticks:{color:'#4a7a9b',font:{size:9,family:'JetBrains Mono'},stepSize:1},beginAtZero:true}
+  }}
+});
+
+// ── Stats ──
+async function loadStats(){
+  try{
+    const d = await fetch('/api/stats').then(r=>r.json());
+    document.getElementById('cTotal').textContent   = d.total;
+    document.getElementById('cSucesso').textContent = d.sucesso;
+    document.getElementById('cErro').textContent    = d.erro;
+    document.getElementById('cHoje').textContent    = d.hoje;
+    document.getElementById('cTaxa').textContent    = d.taxa_sucesso+'%';
+    document.getElementById('cKeysA').textContent   = d.keys_ativas;
+    document.getElementById('lastUp').textContent   = new Date().toLocaleTimeString('pt-BR');
+    if(chartDia)  chartDia.destroy();
+    if(chartHora) chartHora.destroy();
+    chartDia  = new Chart(document.getElementById('chartDia'),  chartCfg(Object.keys(d.por_dia),  Object.values(d.por_dia),  '#00d4ff'));
+    chartHora = new Chart(document.getElementById('chartHora'), chartCfg(Object.keys(d.por_hora), Object.values(d.por_hora), '#00e676'));
+    const tipos=Object.entries(d.por_tipo), max=tipos.length?tipos[0][1]:1;
+    document.getElementById('rankingTipo').innerHTML = tipos.length
+      ? tipos.map(([t,n])=>`<div class="bar-item"><div class="bar-label">${TIPOS_LABELS[t]||t}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.round(n/max*100)}%"></div></div><div class="bar-count">${n}</div></div>`).join('')
+      : '<div class="empty" style="padding:20px">—</div>';
+    document.getElementById('historicoWrap').innerHTML = d.historico.length
+      ? `<div class="table-wrap"><table><thead><tr><th>#</th><th>Tipo</th><th>Query</th><th>Origem</th><th>Status</th><th>Horário</th></tr></thead><tbody>${
+          d.historico.map(h=>`<tr>
+            <td style="color:var(--muted)">${h.id}</td>
+            <td>${h.label}</td>
+            <td style="color:var(--accent)">${h.query}</td>
+            <td style="color:var(--muted)">${h.key}</td>
+            <td><span class="tag ${h.sucesso?'tag-ok':'tag-fail'}">${h.sucesso?'OK':'ERRO'}</span></td>
+            <td style="color:var(--muted)">${h.timestamp}</td>
+          </tr>`).join('')
+        }</tbody></table></div>`
+      : '<div class="empty">Nenhuma consulta ainda</div>';
+  }catch(e){console.error(e)}
+}
+
+// ── Consulta ──
+function atualizarTipo(){
+  const tipo = document.getElementById('cTipo').value;
+  document.getElementById('tipoBadge').textContent = TIPOS_LABELS[tipo];
+  document.getElementById('cQuery').placeholder = TIPOS_EX[tipo]||'valor';
+  atualizarUrl();
+}
+function atualizarUrl(){
+  const tipo  = document.getElementById('cTipo').value;
+  const query = document.getElementById('cQuery').value || '<valor>';
+  document.getElementById('urlPreview').textContent = `GET /v1/consulta/${tipo}?query=${query}`;
+}
+function switchRtab(t, btn){
+  document.querySelectorAll('.rtab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('resultadoFormatado').style.display = t==='formatado'?'block':'none';
+  document.getElementById('resultadoRaw').style.display       = t==='raw'?'block':'none';
+}
+function renderJson(data, depth=0){
+  if(data===null) return '<span class="json-null">null</span>';
+  if(typeof data==='boolean') return `<span class="json-bool">${data}</span>`;
+  if(typeof data==='number')  return `<span class="json-num">${data}</span>`;
+  if(typeof data==='string')  return `<span class="json-str">"${data}"</span>`;
+  if(Array.isArray(data)){
+    if(!data.length) return '[]';
+    const items = data.slice(0,8).map(v=>`<div style="padding-left:${(depth+1)*16}px">${renderJson(v,depth+1)}</div>`).join('');
+    const more  = data.length>8?`<div style="padding-left:${(depth+1)*16}px;color:var(--muted)">... +${data.length-8} itens</div>`:'';
+    return `[${items}${more}<div style="padding-left:${depth*16}px">]</div>`;
+  }
+  if(typeof data==='object'){
+    const entries = Object.entries(data);
+    if(!entries.length) return '{}';
+    const items = entries.map(([k,v])=>`<div style="padding-left:${(depth+1)*16}px"><span class="json-key">"${k}"</span>: ${renderJson(v,depth+1)}</div>`).join('');
+    return `{${items}<div style="padding-left:${depth*16}px">}</div>`;
+  }
+  return String(data);
+}
+async function fazerConsulta(){
+  const tipo  = document.getElementById('cTipo').value;
+  const query = document.getElementById('cQuery').value.trim();
+  const key   = document.getElementById('cApiKey').value.trim();
+  if(!query){ showAlert('consultaStatus','Informe o valor para consultar','err'); return; }
+  if(!key)  { showAlert('consultaStatus','Informe sua API Key','err'); return; }
+  const btn = document.getElementById('btnConsultar');
+  btn.disabled=true; btn.textContent='...';
+  document.getElementById('consultaStatus').style.display='none';
+  try{
+    const r = await fetch(`/v1/consulta/${tipo}?query=${encodeURIComponent(query)}`,{headers:{'X-API-Key':key}});
+    const d = await r.json();
+    if(!r.ok){ showAlert('consultaStatus', d.detail||'Erro na consulta','err'); return; }
+    lastResult = d;
+    const dados = d.data || d;
+    document.getElementById('resultadoPanel').style.display='block';
+    document.getElementById('resultadoTitulo').textContent = `${TIPOS_LABELS[tipo]} — ${query}`;
+    document.getElementById('resultadoFormatado').innerHTML = renderJson(dados);
+    document.getElementById('resultadoRaw').textContent = JSON.stringify(dados, null, 2);
+    document.getElementById('resultadoRaw').style.display='none';
+    document.querySelector('.rtab.active')?.classList.remove('active');
+    document.querySelectorAll('.rtab')[0].classList.add('active');
+    document.getElementById('resultadoFormatado').style.display='block';
+    sessao.unshift({tipo, label:TIPOS_LABELS[tipo], query, ok:true, ts:new Date().toLocaleTimeString('pt-BR')});
+    if(sessao.length>20) sessao.pop();
+    renderSessao();
+    document.getElementById('resultadoPanel').scrollIntoView({behavior:'smooth'});
+  }catch(e){ showAlert('consultaStatus','Erro de conexão: '+e,'err'); }
+  finally{ btn.disabled=false; btn.textContent='CONSULTAR'; }
+}
+function renderSessao(){
+  document.getElementById('sessaoWrap').innerHTML = sessao.length
+    ? `<div class="table-wrap"><table><thead><tr><th>Tipo</th><th>Query</th><th>Status</th><th>Hora</th></tr></thead><tbody>${
+        sessao.map(s=>`<tr style="cursor:pointer" onclick="">
+          <td>${s.label}</td>
+          <td style="color:var(--accent)">${s.query}</td>
+          <td><span class="tag ${s.ok?'tag-ok':'tag-fail'}">${s.ok?'OK':'ERRO'}</span></td>
+          <td style="color:var(--muted)">${s.ts}</td>
+        </tr>`).join('')
+      }</tbody></table></div>`
+    : '<div class="empty" style="padding:20px">Nenhuma consulta ainda</div>';
+}
+function copiarResultado(){
+  if(!lastResult) return;
+  navigator.clipboard.writeText(JSON.stringify(lastResult.data||lastResult, null, 2));
+  showAlert('consultaStatus','JSON copiado!','ok');
+}
+function downloadResultado(){
+  if(!lastResult) return;
+  const blob = new Blob([JSON.stringify(lastResult.data||lastResult, null, 2)],{type:'application/json'});
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=`consulta-${document.getElementById('cTipo').value}-${Date.now()}.json`; a.click();
+}
+
+// ── Clientes ──
+function toggleCustom(){
+  document.getElementById('customLimiteGroup').style.display = document.getElementById('kPlano').value==='custom'?'flex':'none';
+}
+async function criarCliente(){
+  const nome  = document.getElementById('kNome').value.trim();
+  const plano = document.getElementById('kPlano').value;
+  const limite= document.getElementById('kLimite').value||'-1';
+  const proj  = document.getElementById('kProjetos').value.trim();
+  if(!nome){alert('Informe o nome do cliente!');return;}
+  const ak = getAdmin(); if(!ak) return;
+  try{
+    let url;
+    if(plano==='custom'){
+      url=`/admin/keys?nome=${encodeURIComponent(nome)}&limite=${limite}&projetos=${encodeURIComponent(proj)}`;
+    } else {
+      url=`/admin/keys/plano?cliente=${encodeURIComponent(nome)}&plano=${plano}&projetos=${encodeURIComponent(proj)}`;
+    }
+    const d = await fetch(url,{method:'POST',headers:{'X-API-Key':ak}}).then(r=>r.json());
+    if(d.detail){ clearAdmin(); alert('Erro: '+d.detail); return; }
+    const p = PLANOS_INFO[plano]||PLANOS_INFO.custom;
+    document.getElementById('novaKeyResult').style.display='block';
+    document.getElementById('novaKeyResult').innerHTML=`
+      <div class="alert alert-ok">✅ Key criada para <b>${nome}</b> — Plano ${p.nome}</div>
+      <div class="key-box" onclick="navigator.clipboard.writeText('${d.key}');this.style.color='var(--green)';this.textContent='✅ Copiado: ${d.key}';setTimeout(()=>{this.style.color='';this.textContent='${d.key}'},2000)">${d.key}</div>
+      <div style="margin-top:10px;font-size:11px;color:#b0c8e0;line-height:2;font-family:'JetBrains Mono',monospace">
+        <b>Envie ao cliente:</b><br>
+        🔑 Key: <span style="color:var(--accent)">${d.key}</span><br>
+        🌐 URL: <span style="color:var(--accent)">${BASE}/v1/consulta/{tipo}?query={valor}</span><br>
+        📦 Plano: ${p.nome} — Limite: ${d.limite===-1?'Ilimitado':d.limite} consultas
+      </div>`;
+    loadClientes();
+  }catch(e){clearAdmin();alert('Erro: '+e)}
+}
+async function loadClientes(){
+  try{
+    const d = await fetch('/api/keys/stats').then(r=>r.json());
+    const counts={};
+    d.keys.forEach(k=>{counts[k.plano]=(counts[k.plano]||0)+1;});
+    document.getElementById('planosCards').innerHTML = Object.entries(PLANOS_INFO).map(([id,p])=>`
+      <div class="card" style="border-top:2px solid ${p.cor}">
+        <div class="card-label">${p.nome}</div>
+        <div class="card-value" style="color:${p.cor}">${counts[id]||0}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:5px">${p.preco}</div>
+        <div class="card-icon">👥</div>
+      </div>`).join('');
+    document.getElementById('clientesWrap').innerHTML = d.keys.length ? `
+      <div class="table-wrap"><table>
+        <thead><tr><th>Cliente</th><th>Plano</th><th>Key</th><th>Uso / Limite</th><th>Restante</th><th>Último uso</th><th>Status</th><th>Ações</th></tr></thead>
+        <tbody>${d.keys.map(k=>{
+          const p=PLANOS_INFO[k.plano]||PLANOS_INFO.custom;
+          const pct=k.limite>0?Math.round(k.usado/k.limite*100):0;
+          const barColor=pct>80?'var(--red)':pct>50?'var(--yellow)':'var(--green)';
+          return `<tr>
+            <td style="font-weight:600">${k.cliente}</td>
+            <td><span class="tag" style="background:${p.cor}22;color:${p.cor};border:1px solid ${p.cor}44">${p.nome}</span></td>
+            <td style="color:var(--muted);font-size:10px">${k.key}</td>
+            <td>${k.usado}/${k.limite===-1?'∞':k.limite}
+              <div class="prog"><div class="prog-fill" style="width:${pct}%;background:${barColor}"></div></div>
+            </td>
+            <td style="color:${pct>80?'var(--red)':'var(--green)'}">${k.restante}</td>
+            <td style="color:var(--muted);font-size:10px">${k.ultimo_uso||'nunca'}</td>
+            <td><span class="tag ${k.ativo?'tag-on':'tag-off'}">${k.ativo?'ATIVA':'INATIVA'}</span></td>
+            <td><div style="display:flex;gap:4px">
+              <button class="btn btn-a btn-sm" title="Copiar key" onclick="navigator.clipboard.writeText('${k.key_full}');this.textContent='✅';setTimeout(()=>this.textContent='📋',1200)">📋</button>
+              <button class="btn btn-g btn-sm" title="Exportar JSON" onclick="exportarKey('${k.key_full}')">⬇️</button>
+              <button class="btn btn-y btn-sm" title="Ver .env" onclick="verEnv('${k.key_full}','${k.cliente}','${k.plano}')">⚙️</button>
+              <button class="btn btn-r btn-sm" title="${k.ativo?'Desativar':'Reativar'}" onclick="toggleKey('${k.key_full}',${k.ativo})">${k.ativo?'🔒':'🔓'}</button>
+            </div></td>
+          </tr>`;}).join('')}</tbody>
+      </table></div>` : '<div class="empty">Nenhum cliente cadastrado ainda</div>';
+  }catch(e){console.error(e)}
+}
+async function toggleKey(key, ativo){
+  const ak=getAdmin(); if(!ak) return;
+  const rota = ativo ? `/admin/keys/${key}/revogar` : `/admin/keys/${key}/reativar`;
+  // try revoke first if active
+  const url = ativo ? `/admin/keys/${key}` : `/admin/keys/${key}/reativar`;
+  const method = ativo ? 'DELETE' : 'PATCH';
+  try{
+    const d = await fetch(url,{method,headers:{'X-API-Key':ak}}).then(r=>r.json());
+    if(d.detail){clearAdmin();alert('Erro: '+d.detail);return;}
+    loadClientes();
+  }catch(e){clearAdmin();alert('Erro: '+e)}
+}
+async function exportarKey(key){
+  const ak=getAdmin(); if(!ak) return;
+  try{
+    const d = await fetch(`/admin/export/key/${key}`,{headers:{'X-API-Key':ak}}).then(r=>r.json());
+    if(d.detail){clearAdmin();alert('Erro: '+d.detail);return;}
+    const blob=new Blob([JSON.stringify(d,null,2)],{type:'application/json'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download=`unicontroller-${d.unicontroller.cliente}.json`; a.click();
+  }catch(e){clearAdmin();alert('Erro: '+e)}
+}
+async function exportarTodas(){
+  const ak=getAdmin(); if(!ak) return;
+  try{
+    const d = await fetch('/admin/export/all',{headers:{'X-API-Key':ak}}).then(r=>r.json());
+    if(d.detail){clearAdmin();alert('Erro: '+d.detail);return;}
+    const blob=new Blob([JSON.stringify(d,null,2)],{type:'application/json'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download='unicontroller-todas-keys.json'; a.click();
+  }catch(e){clearAdmin();alert('Erro: '+e)}
+}
+function verEnv(key, cliente, plano){
+  const p = PLANOS_INFO[plano]||PLANOS_INFO.custom;
+  const txt =
+    `# Unicontroller — ${cliente} (${p.nome})\n` +
+    `UNICONTROLLER_KEY=${key}\n` +
+    `UNICONTROLLER_URL=${BASE}/v1/consulta\n\n` +
+    `# Uso:\n# GET $(UNICONTROLLER_URL)/{tipo}?query={valor}\n` +
+    `# Header: X-API-Key: $(UNICONTROLLER_KEY)`;
+  abrirModal(`⚙️ .env — ${cliente}`, `
+    <div class="key-box" style="white-space:pre;font-size:11px;color:#b0c8e0;overflow-x:auto">${txt}</div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-a" style="flex:1" onclick="navigator.clipboard.writeText(document.querySelector('.modal .key-box').textContent);this.textContent='✅ Copiado!';setTimeout(()=>this.textContent='📋 Copiar .env',1500)">📋 Copiar .env</button>
+    </div>`);
+}
+
+// ── Keys raw ──
+async function criarKeyRaw(){
+  const nome  = document.getElementById('aKNome').value.trim();
+  const limite= document.getElementById('aKLimite').value||'-1';
+  const proj  = document.getElementById('aKProjetos').value.trim();
+  if(!nome){alert('Informe o nome!');return;}
+  const ak=getAdmin(); if(!ak) return;
+  try{
+    const d = await fetch(`/admin/keys?nome=${encodeURIComponent(nome)}&limite=${limite}&projetos=${encodeURIComponent(proj)}`,{method:'POST',headers:{'X-API-Key':ak}}).then(r=>r.json());
+    if(d.detail){clearAdmin();alert('Erro: '+d.detail);return;}
+    document.getElementById('rawKeyResult').style.display='block';
+    document.getElementById('rawKeyResult').innerHTML=`
+      <div class="alert alert-ok">✅ Key criada: <b>${nome}</b></div>
+      <div class="key-box" onclick="navigator.clipboard.writeText('${d.key}');this.style.color='var(--green)'">${d.key}</div>`;
+    loadKeys();
+  }catch(e){clearAdmin();alert('Erro: '+e)}
+}
+async function loadKeys(){
+  try{
+    const d = await fetch('/api/keys/stats').then(r=>r.json());
+    document.getElementById('keysWrap').innerHTML = d.keys.length ? `
+      <div class="table-wrap"><table>
+        <thead><tr><th>Nome</th><th>Key</th><th>Plano</th><th>Uso</th><th>Limite</th><th>Criado</th><th>Status</th><th>Ações</th></tr></thead>
+        <tbody>${d.keys.map(k=>`<tr>
+          <td style="font-weight:600">${k.nome}</td>
+          <td style="font-size:10px;color:var(--muted)">${k.key}</td>
+          <td>${k.plano}</td>
+          <td>${k.usado}</td>
+          <td>${k.limite===-1?'∞':k.limite}</td>
+          <td style="color:var(--muted);font-size:10px">${k.criado}</td>
+          <td><span class="tag ${k.ativo?'tag-on':'tag-off'}">${k.ativo?'ATIVA':'INATIVA'}</span></td>
+          <td><div style="display:flex;gap:4px">
+            <button class="btn btn-a btn-sm" onclick="navigator.clipboard.writeText('${k.key_full}');this.textContent='✅';setTimeout(()=>this.textContent='📋',1200)">📋</button>
+            <button class="btn btn-r btn-sm" onclick="toggleKey('${k.key_full}',${k.ativo})">${k.ativo?'🔒':'🔓'}</button>
+          </div></td>
+        </tr>`).join('')}</tbody>
+      </table></div>` : '<div class="empty">Nenhuma key ainda</div>';
+  }catch(e){console.error(e)}
+}
+
+// ── Docs ──
+function buildDocs(){
+  document.getElementById('docsBase').textContent = BASE;
+  document.getElementById('docsExemplos').innerHTML = [
+    {lang:'cURL',code:`curl -H "X-API-Key: uc_sua_chave" "${BASE}/v1/consulta/cpf?query=123.456.789-00"`},
+    {lang:'JavaScript / Fetch',code:`const res = await fetch('${BASE}/v1/consulta/cep?query=01310-100', {\n  headers: { 'X-API-Key': 'uc_sua_chave' }\n});\nconst data = await res.json();\nconsole.log(data);`},
+    {lang:'Python',code:`import requests\n\nresp = requests.get(\n    '${BASE}/v1/consulta/cnpj',\n    params={'query': '00.000.000/0001-00'},\n    headers={'X-API-Key': 'uc_sua_chave'}\n)\nprint(resp.json())`},
+    {lang:'Node.js / Axios',code:`const axios = require('axios');\n\nconst { data } = await axios.get('${BASE}/v1/consulta/placa', {\n  params: { query: 'ABC1234' },\n  headers: { 'X-API-Key': 'uc_sua_chave' }\n});\nconsole.log(data);`},
+    {lang:'.env (Railway / Vercel / Docker)',code:`UNICONTROLLER_KEY=uc_sua_chave\nUNICONTROLLER_URL=${BASE}/v1/consulta`},
+    {lang:'GitHub Actions',code:`- name: Consulta CPF\n  run: |\n    curl -H "X-API-Key: ${{ secrets.UNICONTROLLER_KEY }}" \\\n    "${BASE}/v1/consulta/cpf?query=123.456.789-00"`},
+  ].map(e=>`
+    <div style="margin-bottom:14px">
+      <div style="font-size:9px;color:var(--muted);margin-bottom:5px;letter-spacing:1px;text-transform:uppercase;font-family:'JetBrains Mono',monospace">${e.lang}</div>
+      <div class="key-box" style="font-size:11px;white-space:pre;overflow-x:auto;color:#b0c8e0;cursor:default">${e.code}</div>
+    </div>`).join('');
+}
+
+// ── Modal ──
+function abrirModal(titulo, html){
+  document.getElementById('modalTitulo').textContent = titulo;
+  document.getElementById('modalConteudo').innerHTML = html;
+  document.getElementById('modalBg').style.display = 'flex';
+}
+function fecharModal(){ document.getElementById('modalBg').style.display='none'; }
+
+// ── Helpers ──
+function showAlert(id, msg, tipo){
+  const el=document.getElementById(id);
+  el.style.display='block';
+  el.className=`alert alert-${tipo==='ok'?'ok':'err'}`;
+  el.textContent=msg;
+  if(tipo==='ok') setTimeout(()=>el.style.display='none',3000);
+}
+function copiarTexto(el){
+  navigator.clipboard.writeText(el.textContent.trim());
+  const orig=el.style.color; el.style.color='var(--green)';
+  setTimeout(()=>el.style.color=orig,1200);
+}
+function loadAll(){ loadStats(); }
+
+// ── Init ──
+loadStats();
+setInterval(loadStats, 15000);
+</script>
+</body>
+</html>"""
