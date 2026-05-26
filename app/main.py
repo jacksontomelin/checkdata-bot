@@ -490,7 +490,10 @@ async def telegram_webhook(update: dict):
 
 @api.get("/dashboard", response_class=HTMLResponse)
 async def dashboard():
-    return HTMLResponse(DASHBOARD_HTML)
+    import os
+    html_path = os.path.join(os.path.dirname(__file__), "dash.html")
+    with open(html_path) as f:
+        return HTMLResponse(f.read())
 
 # ─── Handlers Telegram ────────────────────────────────────
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
