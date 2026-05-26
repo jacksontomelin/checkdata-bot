@@ -250,6 +250,44 @@ async def root():
 async def ping():
     return {"status": "ok", "timestamp": datetime.now().isoformat()}
 
+# ─── Rota pública estilo fetchbrasil ──────────────────────
+# GET /?token=uc_xxx&api=cpf&query=valor
+@api.get("/api")
+async def consulta_publica(token: str, api: str, query: str):
+    """
+    Rota no estilo fetchbrasil:
+    GET /api?token=uc_xxx&api=cpf&query=valor
+    """
+    # Valida token como API Key
+    k = verificar_api_key(token)
+    # Valida tipo
+    if api not in ENDPOINTS:
+        return {
+            "status": "erro",
+            "code": 400,
+            "mensagem": f"API '{api}' invalida. Tipos: {', '.join(ENDPOINTS.keys())}",
+            "developer": "Jackson Tomelin — Unicontroller",
+        }
+    try:
+        resultado = await consultar_checkdata(api, query)
+        consumir_key(token)
+        registrar_consulta(api, query, k["nome"], True, key=token)
+        return {
+            "status": "ok",
+            "api": api,
+            "query": query,
+            "data": resultado,
+            "developer": "Jackson Tomelin — Unicontroller",
+        }
+    except Exception as e:
+        registrar_consulta(api, query, k["nome"], False, str(e), key=token)
+        return {
+            "status": "erro",
+            "code": 500,
+            "mensagem": str(e),
+            "developer": "Jackson Tomelin — Unicontroller",
+        }
+
 # ─── Rotas de Consulta (com API Key) ──────────────────────
 @api.get("/v1/consulta/{tipo}")
 async def consulta_v1(tipo: str, query: str, x_api_key: str = Header(...)):
