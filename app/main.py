@@ -833,11 +833,11 @@ textarea{resize:vertical;min-height:80px}
     </div>
   </div>
   <div class="tabs">
-    <button class="tab active" onclick="goTab('stats',this)">📊 Stats</button>
-    <button class="tab" onclick="goTab('consulta',this)">🔍 Consulta</button>
-    <button class="tab" onclick="goTab('clientes',this)">👥 Clientes</button>
-    <button class="tab" onclick="goTab('keys',this)">🔑 API Keys</button>
-    <button class="tab" onclick="goTab('docs',this)">📄 Docs</button>
+    <button class="tab active" id="tab-stats" onclick="goTab('stats')">📊 Stats</button>
+    <button class="tab" id="tab-consulta" onclick="goTab('consulta')">🔍 Consulta</button>
+    <button class="tab" id="tab-clientes" onclick="goTab('clientes')">👥 Clientes</button>
+    <button class="tab" id="tab-keys" onclick="goTab('keys')">🔑 API Keys</button>
+    <button class="tab" id="tab-docs" onclick="goTab('docs')">📄 Docs</button>
   </div>
   <div class="header-right">
     <span id="lastUp" style="font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace"></span>
@@ -1114,10 +1114,10 @@ function getAdmin(){
 function clearAdmin(){ adminKey = ''; }
 
 // ── Tab navigation ──
-function goTab(t, btn){
+function goTab(t){
   document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  btn.classList.add('active');
+  document.getElementById('tab-'+t).classList.add('active');
   document.getElementById('page-'+t).classList.add('active');
   if(t==='stats')    loadStats();
   if(t==='clientes') loadClientes();
