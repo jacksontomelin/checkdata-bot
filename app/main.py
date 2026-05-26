@@ -61,23 +61,39 @@ LABELS = {
 
 AGUARDANDO_VALOR = 1
 
+# ─── Planos de Revenda ────────────────────────────────────
+PLANOS = {
+    "basico":   {"nome": "Básico",   "limite": 500,   "preco": "R$ 29,90"},
+    "pro":      {"nome": "Pro",      "limite": 2000,  "preco": "R$ 79,90"},
+    "premium":  {"nome": "Premium",  "limite": 10000, "preco": "R$ 199,90"},
+    "ilimitado":{"nome": "Ilimitado","limite": -1,    "preco": "R$ 399,90"},
+}
+
 # ─── Gerenciamento de API Keys ────────────────────────────
-# Estrutura: { "uc_xxx": { "nome": str, "ativo": bool, "limite": int|-1, "usado": int, "criado": str, "ultimo_uso": str, "projetos": [] } }
+# Estrutura: { "uc_xxx": { "nome": str, "ativo": bool, "limite": int|-1, "usado": int, "criado": str, "ultimo_uso": str, "projetos": [], "plano": str, "cliente": str } }
 api_keys: dict = {}
 
-def gerar_key(nome: str, limite: int = -1, projetos: list = []) -> dict:
+def gerar_key(nome: str, limite: int = -1, projetos: list = [], plano: str = "custom", cliente: str = "") -> dict:
     key = "uc_" + secrets.token_hex(16)
     agora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     api_keys[key] = {
         "nome":       nome,
         "ativo":      True,
-        "limite":     limite,   # -1 = ilimitado
+        "limite":     limite,
         "usado":      0,
         "criado":     agora,
         "ultimo_uso": None,
         "projetos":   projetos,
+        "plano":      plano,
+        "cliente":    cliente or nome,
     }
     return {"key": key, **api_keys[key]}
+
+def gerar_key_plano(cliente: str, plano_id: str, projetos: list = []) -> dict:
+    plano = PLANOS.get(plano_id)
+    if not plano:
+        raise HTTPException(status_code=400, detail=f"Plano '{plano_id}' inválido.")
+    return gerar_key(cliente, plano["limite"], projetos, plano_id, cliente)
 
 def verificar_api_key(key: str) -> dict:
     if key not in api_keys:
@@ -302,6 +318,30 @@ async def info_key(key: str):
     return {"key": key, **api_keys[key]}
 
 # ─── Stats ────────────────────────────────────────────────
+@api.post("/admin/keys/plano", dependencies=[Depends(admin_auth)])
+async def criar_key_por_plano(cliente: str, plano: str, projetos: str = ""):
+    """
+    Cria key por plano pré-definido.
+    - plano: basico | pro | premium | ilimitado
+    - cliente: nome do cliente/empresa
+    """
+    proj = [p.strip() for p in projetos.split(",") if p.strip()] if projetos else []
+    result = gerar_key_plano(cliente, plano, proj)
+    p = PLANOS[plano]
+    return {
+        "ok":      True,
+        "key":     result["key"],
+        "cliente": cliente,
+        "plano":   p["nome"],
+        "limite":  p["limite"],
+        "preco":   p["preco"],
+        "projetos":proj,
+    }
+
+@api.get("/admin/planos", dependencies=[Depends(admin_auth)])
+async def listar_planos():
+    return {"planos": PLANOS}
+
 @api.get("/api/stats")
 async def get_stats():
     taxa = round((stats["sucesso"] / stats["total"] * 100), 1) if stats["total"] > 0 else 0
@@ -326,12 +366,16 @@ async def keys_stats():
     return {
         "keys": [
             {
-                "key":       k[:12] + "...",
+                "key":       k[:20] + "...",
+                "key_full":  k,
                 "nome":      v["nome"],
+                "cliente":   v.get("cliente", v["nome"]),
+                "plano":     v.get("plano", "custom"),
                 "ativo":     v["ativo"],
                 "usado":     v["usado"],
                 "limite":    v["limite"],
                 "restante":  (v["limite"] - v["usado"]) if v["limite"] != -1 else "∞",
+                "pct":       round(v["usado"] / v["limite"] * 100, 1) if v["limite"] > 0 else 0,
                 "projetos":  v["projetos"],
                 "criado":    v["criado"],
                 "ultimo_uso":v["ultimo_uso"],
@@ -392,28 +436,51 @@ async def cmd_keys(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_newkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
     if not args:
+        planos_txt = "\n".join([f"  <code>{k}</code> — {v['nome']} | {v['preco']} | {v['limite'] if v['limite']!=-1 else '∞'} consultas" for k,v in PLANOS.items()])
         await update.message.reply_html(
             "➕ <b>Criar nova API Key:</b>\n\n"
-            "Use: <code>/newkey nome limite projetos</code>\n\n"
-            "Exemplos:\n"
-            "<code>/newkey meu-site</code> — ilimitada\n"
-            "<code>/newkey railway-app 1000</code> — 1000 consultas\n"
-            "<code>/newkey github-actions 500 github,ci</code>" + rodape()
+            "<b>Por plano:</b>\n"
+            "<code>/newkey cliente plano</code>\n"
+            "Ex: <code>/newkey joao-silva pro</code>\n\n"
+            "<b>Personalizada:</b>\n"
+            "<code>/newkey cliente custom 1500</code>\n"
+            "Ex: <code>/newkey empresa-x custom 5000</code>\n\n"
+            f"📦 <b>Planos disponíveis:</b>\n{planos_txt}" + rodape()
         )
         return
-    nome    = args[0]
-    limite  = int(args[1]) if len(args) > 1 and args[1].isdigit() else -1
-    projetos= [p.strip() for p in args[2].split(",")] if len(args) > 2 else []
-    result  = gerar_key(nome, limite, projetos)
-    lim_txt = str(limite) if limite != -1 else "ilimitado"
+
+    cliente = args[0]
+
+    # por plano
+    if len(args) >= 2 and args[1] in PLANOS:
+        plano_id = args[1]
+        projetos = [p.strip() for p in args[2].split(",")] if len(args) > 2 else []
+        result   = gerar_key_plano(cliente, plano_id, projetos)
+        p        = PLANOS[plano_id]
+        await update.message.reply_html(
+            f"✅ <b>Key criada — Plano {p['nome']}</b>\n\n"
+            f"👤 Cliente: <b>{cliente}</b>\n"
+            f"📦 Plano: <b>{p['nome']}</b> ({p['preco']})\n"
+            f"📊 Limite: <b>{p['limite'] if p['limite']!=-1 else 'Ilimitado'}</b> consultas\n"
+            f"🔑 Key:\n<code>{result['key']}</code>\n\n"
+            f"<b>Instruções para o cliente:</b>\n"
+            f"URL: <code>https://api-consultas-unicontroller-production.up.railway.app/v1/consulta/{{tipo}}?query={{valor}}</code>\n"
+            f"Header: <code>X-API-Key: {result['key']}</code>" + rodape()
+        )
+        return
+
+    # custom
+    limite   = int(args[2]) if len(args) > 2 and args[2].isdigit() else -1
+    projetos = [p.strip() for p in args[3].split(",")] if len(args) > 3 else []
+    result   = gerar_key(cliente, limite, projetos, "custom", cliente)
+    lim_txt  = str(limite) if limite != -1 else "Ilimitado"
     await update.message.reply_html(
-        f"✅ <b>Nova API Key criada!</b>\n\n"
-        f"🏷️ Nome: <b>{nome}</b>\n"
-        f"🔑 Key: <code>{result['key']}</code>\n"
-        f"📊 Limite: {lim_txt}\n"
-        f"📁 Projetos: {', '.join(projetos) or 'nenhum'}\n\n"
-        f"<b>Como usar:</b>\n"
-        f"<code>GET /v1/consulta/cpf?query=000.000.000-00</code>\n"
+        f"✅ <b>Key personalizada criada!</b>\n\n"
+        f"👤 Cliente: <b>{cliente}</b>\n"
+        f"📊 Limite: <b>{lim_txt}</b> consultas\n"
+        f"🔑 Key:\n<code>{result['key']}</code>\n\n"
+        f"<b>Instruções para o cliente:</b>\n"
+        f"URL: <code>https://api-consultas-unicontroller-production.up.railway.app/v1/consulta/{{tipo}}?query={{valor}}</code>\n"
         f"Header: <code>X-API-Key: {result['key']}</code>" + rodape()
     )
 
@@ -618,6 +685,7 @@ input:focus,select:focus{border-color:var(--accent)}
   </div>
   <div class="tabs">
     <button class="tab active" onclick="switchTab('stats')">📊 Stats</button>
+    <button class="tab" onclick="switchTab('clientes')">👥 Clientes</button>
     <button class="tab" onclick="switchTab('keys')">🔑 API Keys</button>
     <button class="tab" onclick="switchTab('docs')">📄 Docs</button>
   </div>
@@ -652,6 +720,36 @@ input:focus,select:focus{border-color:var(--accent)}
       <div class="panel-title">Ranking por Tipo</div>
       <div id="rankingTipo"><div class="empty">—</div></div>
     </div>
+  </div>
+</div>
+
+<!-- ── CLIENTES ── -->
+<div class="page" id="page-clientes">
+  <div class="cards" id="planosCards"></div>
+  <div class="panel" style="margin-bottom:18px">
+    <div class="panel-title">Novo Cliente</div>
+    <div class="form-row">
+      <input id="cNome" placeholder="Nome do cliente ou empresa" style="flex:2;min-width:200px">
+      <select id="cPlano" style="min-width:160px">
+        <option value="basico">Básico — 500 consultas</option>
+        <option value="pro">Pro — 2.000 consultas</option>
+        <option value="premium">Premium — 10.000 consultas</option>
+        <option value="ilimitado">Ilimitado — ∞ consultas</option>
+        <option value="custom">Personalizado</option>
+      </select>
+      <input id="cLimiteCustom" placeholder="Limite (só custom)" type="number" style="width:160px;display:none">
+      <input id="cProjetos" placeholder="Tags: site,app" style="flex:1;min-width:130px">
+      <button class="btn btn-green" onclick="criarCliente()">➕ GERAR KEY</button>
+    </div>
+    <div id="novaClienteKeyBox" style="display:none">
+      <div style="font-size:11px;color:var(--green);margin-bottom:6px;letter-spacing:1px">✅ KEY GERADA — Clique para copiar:</div>
+      <div class="key-box" id="novaClienteKey" onclick="copiarTexto(this)"></div>
+      <div id="instrucaoCliente" style="margin-top:10px;font-size:12px;color:#b0c8e0;line-height:1.8"></div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-title">Clientes Cadastrados</div>
+    <div id="clientesContainer"><div class="empty">Carregando...</div></div>
   </div>
 </div>
 
@@ -711,6 +809,14 @@ const TIPOS = {cpf:'👤 CPF',cns:'🏥 CNS',cep:'📍 CEP',cnpj:'🏢 CNPJ',nom
 const BASE = window.location.origin;
 let chartDia=null, chartHora=null;
 
+const PLANOS_INFO = {
+  basico:   {nome:'Básico',   limite:500,   preco:'R$ 29,90',  cor:'#00d4ff'},
+  pro:      {nome:'Pro',      limite:2000,  preco:'R$ 79,90',  cor:'#00e676'},
+  premium:  {nome:'Premium',  limite:10000, preco:'R$ 199,90', cor:'#bf5af2'},
+  ilimitado:{nome:'Ilimitado',limite:-1,    preco:'R$ 399,90', cor:'#ffd32a'},
+  custom:   {nome:'Custom',   limite:-1,    preco:'—',         cor:'#ff9f43'},
+};
+
 function switchTab(t){
   document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
@@ -718,6 +824,89 @@ function switchTab(t){
   document.getElementById('page-'+t).classList.add('active');
   if(t==='keys') loadKeys();
   if(t==='docs') buildDocs();
+  if(t==='clientes') loadClientes();
+}
+
+document.getElementById('cPlano').addEventListener('change', function(){
+  document.getElementById('cLimiteCustom').style.display = this.value==='custom'?'block':'none';
+});
+
+async function criarCliente(){
+  const nome   = document.getElementById('cNome').value.trim();
+  const plano  = document.getElementById('cPlano').value;
+  const limite = document.getElementById('cLimiteCustom').value || -1;
+  const proj   = document.getElementById('cProjetos').value.trim();
+  if(!nome){alert('Informe o nome do cliente!');return;}
+  const adminKey = prompt('Informe sua API_SECRET (chave admin):');
+  if(!adminKey) return;
+  try{
+    let url, body={};
+    if(plano==='custom'){
+      url = `/admin/keys?nome=${encodeURIComponent(nome)}&limite=${limite}&projetos=${encodeURIComponent(proj)}`;
+    } else {
+      url = `/admin/keys/plano?cliente=${encodeURIComponent(nome)}&plano=${plano}&projetos=${encodeURIComponent(proj)}`;
+    }
+    const d = await fetch(url,{method:'POST',headers:{'X-API-Key':adminKey}}).then(r=>r.json());
+    if(d.ok){
+      const box = document.getElementById('novaClienteKeyBox');
+      box.style.display='block';
+      const keyEl = document.getElementById('novaClienteKey');
+      keyEl.textContent = d.key;
+      keyEl.classList.remove('copied');
+      const p = PLANOS_INFO[plano]||PLANOS_INFO.custom;
+      document.getElementById('instrucaoCliente').innerHTML =
+        `<b>📋 Instruções para enviar ao cliente:</b><br>` +
+        `🔑 <b>API Key:</b> <code>${d.key}</code><br>` +
+        `📦 <b>Plano:</b> ${p.nome} — ${p.preco}<br>` +
+        `📊 <b>Limite:</b> ${d.limite===-1?'Ilimitado':d.limite} consultas<br>` +
+        `🌐 <b>URL base:</b> <code>https://api-consultas-unicontroller-production.up.railway.app/v1/consulta/{tipo}?query={valor}</code><br>` +
+        `🔐 <b>Header:</b> <code>X-API-Key: ${d.key}</code>`;
+      loadClientes();
+    } else { alert(d.detail||'Erro ao criar key'); }
+  }catch(e){alert('Erro: '+e)}
+}
+
+async function loadClientes(){
+  try{
+    const d = await fetch('/api/keys/stats').then(r=>r.json());
+    // Cards de planos
+    const counts = {};
+    d.keys.forEach(k=>{ counts[k.plano]=(counts[k.plano]||0)+1; });
+    document.getElementById('planosCards').innerHTML = Object.entries(PLANOS_INFO).map(([id,p])=>`
+      <div class="card" style="border-top:2px solid ${p.cor}">
+        <div class="card-label">${p.nome}</div>
+        <div class="card-value" style="color:${p.cor}">${counts[id]||0}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">${p.preco}</div>
+        <div class="card-icon">👥</div>
+      </div>`).join('');
+    // Tabela
+    document.getElementById('clientesContainer').innerHTML = d.keys.length ? `
+      <table>
+        <thead><tr><th>Cliente</th><th>Plano</th><th>Key</th><th>Uso</th><th>Restante</th><th>Último uso</th><th>Status</th><th>Copiar</th></tr></thead>
+        <tbody>${d.keys.map(k=>{
+          const p=PLANOS_INFO[k.plano]||PLANOS_INFO.custom;
+          const pct=k.limite>0?Math.round(k.usado/k.limite*100):0;
+          const barColor=pct>80?'var(--red)':pct>50?'var(--yellow)':'var(--green)';
+          const restante=k.limite===-1?'∞':(k.limite-k.usado);
+          return `<tr>
+            <td style="font-weight:600;color:var(--text)">${k.cliente}</td>
+            <td><span class="tag" style="background:${p.cor}22;color:${p.cor};border:1px solid ${p.cor}44">${p.nome}</span></td>
+            <td style="color:var(--muted)">${k.key}</td>
+            <td>${k.usado}<div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${barColor}"></div></div></td>
+            <td style="color:${k.limite===-1?'var(--green)':pct>80?'var(--red)':'var(--text)'}">${restante}</td>
+            <td style="color:var(--muted);font-size:11px">${k.ultimo_uso||'nunca'}</td>
+            <td><span class="tag ${k.ativo?'ativo':'inativo'}">${k.ativo?'ATIVA':'INATIVA'}</span></td>
+            <td><button class="btn btn-accent" style="font-size:10px;padding:4px 10px" onclick="copiarKeyFull('${k.key_full}',this)">📋</button></td>
+          </tr>`;}).join('')}</tbody>
+      </table>` : '<div class="empty">Nenhum cliente cadastrado ainda</div>';
+  }catch(e){console.error(e)}
+}
+
+function copiarKeyFull(key, btn){
+  navigator.clipboard.writeText(key);
+  const orig = btn.textContent;
+  btn.textContent='✅';
+  setTimeout(()=>btn.textContent=orig, 1500);
 }
 
 function buildDocs(){
