@@ -69,23 +69,74 @@ PLANOS = {
     "ilimitado":{"nome": "Ilimitado","limite": -1,    "preco": "R$ 399,90"},
 }
 
+# ─── Banco de dados SQLite ────────────────────────────────
+import sqlite3, json as _json
+
+DB_PATH = os.getenv("DB_PATH", "/app/data/unicontroller.db")
+
+def get_db():
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    conn = get_db()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS api_keys (
+            key        TEXT PRIMARY KEY,
+            nome       TEXT NOT NULL,
+            cliente    TEXT NOT NULL,
+            plano      TEXT DEFAULT 'custom',
+            ativo      INTEGER DEFAULT 1,
+            limite     INTEGER DEFAULT -1,
+            usado      INTEGER DEFAULT 0,
+            projetos   TEXT DEFAULT '[]',
+            criado     TEXT NOT NULL,
+            ultimo_uso TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+    logger.info(f"✅ Banco inicializado: {DB_PATH}")
+
 # ─── Gerenciamento de API Keys ────────────────────────────
-# Estrutura: { "uc_xxx": { "nome": str, "ativo": bool, "limite": int|-1, "usado": int, "criado": str, "ultimo_uso": str, "projetos": [], "plano": str, "cliente": str } }
-api_keys: dict = {}
+api_keys: dict = {}  # cache em memória
+
+def _row_to_dict(row) -> dict:
+    if row is None: return None
+    d = dict(row)
+    d["projetos"] = _json.loads(d.get("projetos", "[]"))
+    d["ativo"]    = bool(d["ativo"])
+    return d
+
+def _load_keys_cache():
+    """Carrega todas as keys do banco para o cache em memória."""
+    global api_keys
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM api_keys").fetchall()
+    conn.close()
+    api_keys = {r["key"]: _row_to_dict(r) for r in rows}
+    logger.info(f"✅ {len(api_keys)} API Keys carregadas do banco")
 
 def gerar_key(nome: str, limite: int = -1, projetos: list = [], plano: str = "custom", cliente: str = "") -> dict:
-    key = "uc_" + secrets.token_hex(16)
+    key   = "uc_" + secrets.token_hex(16)
     agora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    cli   = cliente or nome
+    proj  = _json.dumps(projetos)
+    # Salva no banco
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO api_keys (key,nome,cliente,plano,ativo,limite,usado,projetos,criado) VALUES (?,?,?,?,1,?,0,?,?)",
+        (key, nome, cli, plano, limite, proj, agora)
+    )
+    conn.commit()
+    conn.close()
+    # Atualiza cache
     api_keys[key] = {
-        "nome":       nome,
-        "ativo":      True,
-        "limite":     limite,
-        "usado":      0,
-        "criado":     agora,
-        "ultimo_uso": None,
-        "projetos":   projetos,
-        "plano":      plano,
-        "cliente":    cliente or nome,
+        "nome": nome, "cliente": cli, "plano": plano,
+        "ativo": True, "limite": limite, "usado": 0,
+        "projetos": projetos, "criado": agora, "ultimo_uso": None,
     }
     return {"key": key, **api_keys[key]}
 
@@ -108,7 +159,13 @@ def verificar_api_key(key: str) -> dict:
 def consumir_key(key: str):
     if key in api_keys:
         api_keys[key]["usado"] += 1
-        api_keys[key]["ultimo_uso"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        agora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        api_keys[key]["ultimo_uso"] = agora
+        # Persiste no banco
+        conn = get_db()
+        conn.execute("UPDATE api_keys SET usado=usado+1, ultimo_uso=? WHERE key=?", (agora, key))
+        conn.commit()
+        conn.close()
 
 # ─── Stats ────────────────────────────────────────────────
 stats = {
@@ -189,9 +246,13 @@ bot_app: Application = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global bot_app
-    # Criar key padrão para uso interno/admin
+    # Inicializa banco e carrega keys
+    init_db()
+    _load_keys_cache()
+    # Criar key admin se não existir
     if not any(v["nome"] == "admin" for v in api_keys.values()):
         gerar_key("admin", limite=-1, projetos=["railway", "github", "internal"])
+        logger.info("✅ Key admin criada")
     if TELEGRAM_TOKEN:
         bot_app = Application.builder().token(TELEGRAM_TOKEN).build()
         bot_app.add_handler(CommandHandler("start",  cmd_start))
@@ -414,6 +475,9 @@ async def revogar_key(key: str):
     if key not in api_keys:
         raise HTTPException(status_code=404, detail="Key não encontrada.")
     api_keys[key]["ativo"] = False
+    conn = get_db()
+    conn.execute("UPDATE api_keys SET ativo=0 WHERE key=?", (key,))
+    conn.commit(); conn.close()
     return {"ok": True, "mensagem": f"Key {key[:12]}... desativada."}
 
 @api.patch("/admin/keys/{key}/reativar", dependencies=[Depends(admin_auth)])
@@ -421,6 +485,9 @@ async def reativar_key(key: str):
     if key not in api_keys:
         raise HTTPException(status_code=404, detail="Key não encontrada.")
     api_keys[key]["ativo"] = True
+    conn = get_db()
+    conn.execute("UPDATE api_keys SET ativo=1 WHERE key=?", (key,))
+    conn.commit(); conn.close()
     return {"ok": True, "mensagem": f"Key {key[:12]}... reativada."}
 
 @api.get("/admin/keys/{key}/info", dependencies=[Depends(admin_auth)])
