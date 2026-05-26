@@ -708,6 +708,45 @@ async def dashboard():
         return HTMLResponse(f.read())
 
 # ─── Handlers Telegram ────────────────────────────────────
+def _extrair_fotos(data, _fotos=None) -> list:
+    """
+    Percorre o JSON recursivamente procurando campos base64 de imagens.
+    Remove os campos de foto do dict para não poluir o texto.
+    Retorna lista de strings base64.
+    """
+    if _fotos is None:
+        _fotos = []
+
+    FOTO_CAMPOS = {
+        "foto", "fotos", "photo", "photos", "imagem", "imagens",
+        "image", "images", "foto_base64", "imagem_base64", "base64",
+        "foto1", "foto2", "foto3", "foto4", "foto5",
+        "url_foto", "thumbnail", "picture", "pictures",
+    }
+
+    if isinstance(data, dict):
+        keys_to_remove = []
+        for k, v in list(data.items()):
+            if k.lower() in FOTO_CAMPOS:
+                if isinstance(v, str) and len(v) > 100:
+                    # Pode ser base64
+                    _fotos.append(v)
+                    keys_to_remove.append(k)
+                elif isinstance(v, list):
+                    for item in v:
+                        if isinstance(item, str) and len(item) > 100:
+                            _fotos.append(item)
+                    keys_to_remove.append(k)
+            else:
+                _extrair_fotos(v, _fotos)
+        for k in keys_to_remove:
+            del data[k]
+    elif isinstance(data, list):
+        for item in data:
+            _extrair_fotos(item, _fotos)
+
+    return _fotos
+
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_html(
         "🦅 <b>Unicontroller</b>\nSistema de Consultas\n\n"
@@ -886,15 +925,35 @@ async def cb_receber_valor(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         resultado = await consultar_qualquer(tipo, query_val)
         registrar_consulta(tipo, query_val, usuario, True)
+
+        fotos_b64 = _extrair_fotos(resultado)
+
         texto = (
             "🦅 <b>Unicontroller</b>\n\n"
-            f"✅ <b>{LABELS[tipo]}</b>\n"
+            f"✅ <b>{LABELS.get(tipo, tipo)}</b>\n"
             f"🔎 <code>{query_val}</code>\n\n"
             f"{formatar_resultado(resultado)}" + rodape()
         )
         if len(texto) > 4000:
             texto = texto[:3900] + "\n\n<i>... resultado truncado</i>" + rodape()
         await msg.edit_text(texto, parse_mode="HTML")
+
+        if fotos_b64:
+            await update.message.reply_text(f"📸 Enviando {len(fotos_b64)} foto(s)...")
+            for i, b64 in enumerate(fotos_b64[:10], 1):
+                try:
+                    import base64, io
+                    img_bytes = base64.b64decode(b64)
+                    bio = io.BytesIO(img_bytes)
+                    bio.name = f"foto_{i}.jpg"
+                    await update.message.reply_photo(
+                        photo=bio,
+                        caption=f"📸 Foto {i}/{len(fotos_b64)} — {LABELS.get(tipo,tipo)}: {query_val}" + rodape(),
+                        parse_mode="HTML"
+                    )
+                except Exception as ef:
+                    logger.warning(f"Erro ao enviar foto {i}: {ef}")
+
     except Exception as e:
         registrar_consulta(tipo, query_val, usuario, False, str(e))
         await msg.edit_text(f"❌ Erro: {str(e)}" + rodape(), parse_mode="HTML")
