@@ -251,13 +251,16 @@ async def consultar_qualquer(tipo: str, query: str) -> dict:
     else:
         raise HTTPException(status_code=400, detail=f"Tipo '{tipo}' inválido.")
 
-CAMPOS_IGNORADOS = {"status", "developer", "dev", "api", "version", "via", "source", "powered_by"}
+CAMPOS_IGNORADOS = {"status", "developer", "dev", "api", "version", "via", "source", "powered_by", "imagens", "fotos", "photos", "images"}
 
 def _limpar_valor(v) -> str:
     """Limpa e formata um valor para exibição."""
     if v is None or v == "None" or v == "":
         return "—"
     s = str(v).strip()
+    # Ignora strings base64 longas (fotos)
+    if len(s) > 200 and all(c in 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\n\r' for c in s[:50]):
+        return "—"
     # Remove links tel: gerados automaticamente
     import re
     s = re.sub(r'\[([^\]]+)\]\(tel:[^)]+\)', r'\1', s)
@@ -863,6 +866,18 @@ def _extrair_fotos(data, _fotos=None) -> list:
             return v.split(',', 1)[1]
         return v
 
+    LABELS_FOTOS = {
+        "dianteira": "📸 Dianteira",
+        "traseira":  "📸 Traseira",
+        "panoramica":"📸 Panorâmica",
+        "chassi":    "📸 Chassi",
+        "motor":     "📸 Motor",
+        "documento": "📸 Documento",
+        "hodometro": "📸 Hodômetro",
+        "lateral":   "📸 Lateral",
+        "detalhe":   "📸 Detalhe",
+    }
+
     if isinstance(data, dict):
         keys_to_remove = []
         for k, v in list(data.items()):
@@ -871,17 +886,18 @@ def _extrair_fotos(data, _fotos=None) -> list:
             if kl == 'imagens' and isinstance(v, dict):
                 for sub_k, sub_v in list(v.items()):
                     if _is_base64(sub_v):
-                        _fotos.append(_clean_b64(sub_v))
+                        label = LABELS_FOTOS.get(sub_k.lower(), f"📸 {sub_k.title()}")
+                        _fotos.append((label, _clean_b64(sub_v)))
                 keys_to_remove.append(k)
             elif kl in FOTO_CAMPOS or 'foto' in kl or 'imag' in kl or 'photo' in kl:
                 if _is_base64(v):
-                    _fotos.append(_clean_b64(v))
+                    _fotos.append(("📸 Foto", _clean_b64(v)))
                     keys_to_remove.append(k)
                 elif isinstance(v, list):
                     has_b64 = False
                     for item in v:
                         if _is_base64(item):
-                            _fotos.append(_clean_b64(item))
+                            _fotos.append(("📸 Foto", _clean_b64(item)))
                             has_b64 = True
                     if has_b64:
                         keys_to_remove.append(k)
@@ -1096,16 +1112,16 @@ async def cb_receber_valor(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.edit_text(texto, parse_mode="HTML")
 
         if fotos_b64:
-            await update.message.reply_text(f"📸 Enviando {len(fotos_b64)} foto(s)...")
-            for i, b64 in enumerate(fotos_b64[:10], 1):
+            for i, item in enumerate(fotos_b64[:10], 1):
+                label, b64 = item if isinstance(item, tuple) else ("📸 Foto", item)
                 try:
-                    import base64, io
-                    img_bytes = base64.b64decode(b64)
+                    import base64 as _b64mod, io
+                    img_bytes = _b64mod.b64decode(b64)
                     bio = io.BytesIO(img_bytes)
                     bio.name = f"foto_{i}.jpg"
                     await update.message.reply_photo(
                         photo=bio,
-                        caption=f"📸 Foto {i}/{len(fotos_b64)} — {LABELS.get(tipo,tipo)}: {query_val}" + rodape(),
+                        caption=f"{label} ({i}/{len(fotos_b64)}) — {LABELS.get(tipo,tipo)}: {query_val}" + rodape(),
                         parse_mode="HTML"
                     )
                 except Exception as ef:
