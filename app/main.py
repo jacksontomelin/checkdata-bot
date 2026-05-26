@@ -72,10 +72,9 @@ PLANOS = {
 # ─── Banco de dados SQLite ────────────────────────────────
 import sqlite3, json as _json
 
-DB_PATH = os.getenv("DB_PATH", "/app/data/unicontroller.db")
+DB_PATH = os.getenv("DB_PATH", "/tmp/unicontroller.db")
 
 def get_db():
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
