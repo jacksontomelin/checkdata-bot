@@ -28,35 +28,48 @@ WEBHOOK_URL     = os.getenv("WEBHOOK_URL", "")
 CHECKDATA_BASE  = "https://checkdata.vip/api/consultas"
 
 ENDPOINTS = {
-    "cpf":          "cpf_basico",
-    "cns":          "cns",
-    "cep":          "cep",
-    "cnpj":         "cnpj_online",
-    "nome":         "nome_online",
-    "email":        "email_abreviado",
-    "telefone":     "telefone_endereco",
-    "vizinhos":     "vizinhos-online",
-    "placa":        "placacompleta",
-    "proprietario": "frota_cpf",
-    "mae":          "mae",
-    "pai":          "pai",
-    "titulo":       "titulo",
+    "cpf":           "cpf_basico",
+    "cns":           "cns",
+    "cep":           "cep",
+    "cnpj":          "cnpj_online",
+    "nome":          "nome_online",
+    "email":         "email_abreviado",
+    "telefone":      "telefone_endereco",
+    "vizinhos":      "vizinhos-online",
+    "placa":         "placacompleta",
+    "proprietario":  "frota_cpf",
+    "mae":           "mae",
+    "pai":           "pai",
+    "titulo":        "titulo",
+}
+
+# Endpoints externos (outras APIs)
+ENDPOINTS_EXTERNOS = {
+    "laudo_veicular": {
+        "url":    "https://api.fetchbrasil.pro/",
+        "token":  "FB-4EF4-BA2D-353A-BEFC",
+        "api":    "laudo_veicular",
+        "tipo_validacao": "placa",
+        "exemplo": "ABC1234",
+        "label":  "📋 Laudo Veicular",
+    },
 }
 
 LABELS = {
-    "cpf":          "👤 CPF",
-    "cns":          "🏥 CNS",
-    "cep":          "📍 CEP",
-    "cnpj":         "🏢 CNPJ",
-    "nome":         "🔤 Nome",
-    "email":        "✉️ E-mail",
-    "telefone":     "📞 Telefone",
-    "vizinhos":     "🏘️ Vizinhos",
-    "placa":        "🚗 Veículo",
-    "proprietario": "🔑 Proprietário",
-    "mae":          "👩 Nome da Mãe",
-    "pai":          "👨 Nome do Pai",
-    "titulo":       "🗳️ Título Eleitor",
+    "cpf":           "👤 CPF",
+    "cns":           "🏥 CNS",
+    "cep":           "📍 CEP",
+    "cnpj":          "🏢 CNPJ",
+    "nome":          "🔤 Nome",
+    "email":         "✉️ E-mail",
+    "telefone":      "📞 Telefone",
+    "vizinhos":      "🏘️ Vizinhos",
+    "placa":         "🚗 Veículo",
+    "proprietario":  "🔑 Proprietário",
+    "mae":           "👩 Nome da Mãe",
+    "pai":           "👨 Nome do Pai",
+    "titulo":        "🗳️ Título Eleitor",
+    "laudo_veicular":"📋 Laudo Veicular",
 }
 
 AGUARDANDO_VALOR = 1
@@ -218,6 +231,26 @@ async def consultar_checkdata(tipo: str, query: str) -> dict:
         r.raise_for_status()
         return r.json()
 
+async def consultar_externo(tipo: str, query: str) -> dict:
+    """Consulta APIs externas (ex: fetchbrasil)."""
+    cfg = ENDPOINTS_EXTERNOS.get(tipo)
+    if not cfg:
+        raise HTTPException(status_code=400, detail=f"Endpoint externo '{tipo}' não encontrado.")
+    params = {"token": cfg["token"], "api": cfg["api"], "query": query}
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.get(cfg["url"], params=params)
+        r.raise_for_status()
+        return r.json()
+
+async def consultar_qualquer(tipo: str, query: str) -> dict:
+    """Consulta checkdata ou API externa dependendo do tipo."""
+    if tipo in ENDPOINTS:
+        return await consultar_checkdata(tipo, query)
+    elif tipo in ENDPOINTS_EXTERNOS:
+        return await consultar_externo(tipo, query)
+    else:
+        raise HTTPException(status_code=400, detail=f"Tipo '{tipo}' inválido.")
+
 CAMPOS_IGNORADOS = {"status", "developer", "dev", "api", "version", "via", "source", "powered_by"}
 
 def formatar_resultado(data, profundidade=0) -> str:
@@ -262,6 +295,8 @@ async def lifespan(app: FastAPI):
         bot_app.add_handler(CommandHandler("keys",   cmd_keys))
         bot_app.add_handler(CommandHandler("newkey", cmd_newkey))
         for tipo in ENDPOINTS:
+            bot_app.add_handler(CommandHandler(tipo, lambda u, c, t=tipo: cmd_consulta_direta(u, c, t)))
+        for tipo in ENDPOINTS_EXTERNOS:
             bot_app.add_handler(CommandHandler(tipo, lambda u, c, t=tipo: cmd_consulta_direta(u, c, t)))
         bot_app.add_handler(ConversationHandler(
             entry_points=[CallbackQueryHandler(cb_tipo_selecionado, pattern="^tipo:")],
@@ -317,10 +352,12 @@ async def ping():
 async def _consulta_token(tipo: str, query: str, token: str):
     k = verificar_api_key(token)
     try:
-        resultado = await consultar_checkdata(tipo, query)
+        resultado = await consultar_qualquer(tipo, query)
         consumir_key(token)
         registrar_consulta(tipo, query, k["nome"], True, key=token)
         return resultado
+    except HTTPException:
+        raise
     except Exception as e:
         registrar_consulta(tipo, query, k["nome"], False, str(e), key=token)
         raise HTTPException(status_code=500, detail=str(e))
@@ -377,6 +414,11 @@ async def rota_pai(query: str, token: str):
 async def rota_titulo(query: str, token: str):
     return await _consulta_token("titulo", query, token)
 
+@api.get("/consultas/laudo_veicular")
+async def rota_laudo(query: str, token: str):
+    """Laudo veicular completo por placa. Ex: query=ABC1234"""
+    return await _consulta_token("laudo_veicular", query, token)
+
 # ─── Rota pública estilo fetchbrasil ──────────────────────
 # GET /?token=uc_xxx&api=cpf&query=valor
 @api.get("/api")
@@ -388,15 +430,16 @@ async def consulta_publica(token: str, api: str, query: str):
     # Valida token como API Key
     k = verificar_api_key(token)
     # Valida tipo
-    if api not in ENDPOINTS:
+    todos = list(ENDPOINTS.keys()) + list(ENDPOINTS_EXTERNOS.keys())
+    if api not in todos:
         return {
             "status": "erro",
             "code": 400,
-            "mensagem": f"API '{api}' invalida. Tipos: {', '.join(ENDPOINTS.keys())}",
+            "mensagem": f"API '{api}' invalida. Tipos: {', '.join(todos)}",
             "developer": "Jackson Tomelin — Unicontroller",
         }
     try:
-        resultado = await consultar_checkdata(api, query)
+        resultado = await consultar_qualquer(api, query)
         consumir_key(token)
         registrar_consulta(api, query, k["nome"], True, key=token)
         return {
@@ -406,14 +449,12 @@ async def consulta_publica(token: str, api: str, query: str):
             "data": resultado,
             "developer": "Jackson Tomelin — Unicontroller",
         }
+    except HTTPException as e:
+        registrar_consulta(api, query, k["nome"], False, e.detail, key=token)
+        return {"status": "erro", "code": e.status_code, "mensagem": e.detail, "developer": "Jackson Tomelin — Unicontroller"}
     except Exception as e:
         registrar_consulta(api, query, k["nome"], False, str(e), key=token)
-        return {
-            "status": "erro",
-            "code": 500,
-            "mensagem": str(e),
-            "developer": "Jackson Tomelin — Unicontroller",
-        }
+        return {"status": "erro", "code": 500, "mensagem": str(e), "developer": "Jackson Tomelin — Unicontroller"}
 
 # ─── Rotas de Consulta (com API Key) ──────────────────────
 @api.get("/v1/consulta/{tipo}")
@@ -683,7 +724,8 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🔑 <code>/proprietario 000.000.000-00</code>\n"
         "👩 <code>/mae Nome da Mãe</code>\n"
         "👨 <code>/pai Nome do Pai</code>\n"
-        "🗳️ <code>/titulo 000000000000</code>\n\n"
+        "🗳️ <code>/titulo 000000000000</code>\n"
+        "📋 <code>/laudo_veicular ABC1234</code>\n\n"
         "📊 <code>/stats</code> — Estatísticas\n"
         "🔑 <code>/keys</code> — Listar API Keys\n"
         "➕ <code>/newkey nome limite</code> — Criar Key\n\n"
@@ -808,7 +850,7 @@ async def cmd_consulta_direta(update: Update, context: ContextTypes.DEFAULT_TYPE
     query = " ".join(context.args)
     msg   = await update.message.reply_text("⏳ Consultando...")
     try:
-        resultado = await consultar_checkdata(tipo, query)
+        resultado = await consultar_qualquer(tipo, query)
         registrar_consulta(tipo, query, usuario, True)
         texto = (
             "🦅 <b>Unicontroller</b>\n\n"
@@ -842,7 +884,7 @@ async def cb_receber_valor(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query_val = update.message.text.strip()
     msg = await update.message.reply_text("⏳ Consultando...")
     try:
-        resultado = await consultar_checkdata(tipo, query_val)
+        resultado = await consultar_qualquer(tipo, query_val)
         registrar_consulta(tipo, query_val, usuario, True)
         texto = (
             "🦅 <b>Unicontroller</b>\n\n"
@@ -867,7 +909,8 @@ def _exemplos(tipo: str) -> str:
         "cpf":"123.456.789-00","cns":"123456789012345","cep":"01310-100",
         "cnpj":"00.000.000/0001-00","nome":"João Silva","email":"joao@email.com",
         "telefone":"11999999999","vizinhos":"01310-100","placa":"ABC1234",
-        "proprietario":"123.456.789-00","mae":"Maria Silva","pai":"José Silva","titulo":"000000000000",
+        "proprietario":"123.456.789-00","mae":"Maria Silva","pai":"José Silva",
+        "titulo":"000000000000","laudo_veicular":"ABC1234",
     }
     return ex.get(tipo, "valor")
 
