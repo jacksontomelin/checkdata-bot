@@ -1113,8 +1113,21 @@ function getAdmin(){
 }
 function clearAdmin(){ adminKey = ''; }
 
-// ── Tab navigation ──
+// ═══ TAB NAVIGATION ═══
 function goTab(t){
+  document.querySelectorAll(".tab").forEach(function(b){b.classList.remove("active");});
+  document.querySelectorAll(".page").forEach(function(p){p.classList.remove("active");});
+  var tabEl  = document.getElementById("tab-"+t);
+  var pageEl = document.getElementById("page-"+t);
+  if(tabEl)  tabEl.classList.add("active");
+  if(pageEl) pageEl.classList.add("active");
+  if(t==="stats")    loadStats();
+  if(t==="clientes") loadClientes();
+  if(t==="keys")     loadKeys();
+  if(t==="docs")     buildDocs();
+}
+
+
   document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('tab-'+t).classList.add('active');
@@ -1459,9 +1472,12 @@ function copiarTexto(el){
 }
 function loadAll(){ loadStats(); }
 
-// ── Init ──
-loadStats();
-setInterval(loadStats, 15000);
+
+// ═══ INIT ═══
+document.addEventListener("DOMContentLoaded", function(){
+  loadStats();
+  setInterval(loadStats, 15000);
+});
 </script>
 </body>
 </html>"""
